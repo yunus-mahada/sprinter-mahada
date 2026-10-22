@@ -1,0 +1,6 @@
+{
+  "name": "SPRINTER MAHADA",
+  "description": "Aplikasi Operasional Lapangan & Manajemen Tugas Kurir Sprinter Mahada dengan Database Supabase PostgreSQL.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>SPRINTER MAHADA - Operasional Lapangan</title>
+    <meta name="description" content="Aplikasi Operasional Lapangan & Manajemen Tugas Kurir Sprinter Mahada dengan Database Supabase PostgreSQL." />
+    <meta property="og:title" content="SPRINTER MAHADA" />
+    <meta property="og:description" content="Aplikasi Operasional Lapangan & Manajemen Tugas Kurir Sprinter Mahada dengan Database Supabase PostgreSQL." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <script>
+      // Gracefully prevent unhandled WebSocket/HMR reconnection noise in preview sandbox
+      (function () {
+        if (typeof window !== 'undefined' && window.WebSocket) {
+          var NativeWS = window.WebSocket;
+          window.WebSocket = function (url, protocols) {
+            if (
+              protocols === 'vite-hmr' ||
+              (typeof url === 'string' && (url.indexOf('vite') !== -1 || url.indexOf('@vite') !== -1))
+            ) {
+              var target = new EventTarget();
+              target.binaryType = 'blob';
+              target.readyState = 1;
+              target.bufferedAmount = 0;
+              target.send = function () {};
+              target.close = function () {};
+              setTimeout(function () {
+                target.dispatchEvent(new Event('open'));
+              }, 0);
+              return target;
+            }
+            return new NativeWS(url, protocols);
+          };
+          window.WebSocket.prototype = NativeWS.prototype;
+          window.WebSocket.CONNECTING = 0;
+          window.WebSocket.OPEN = 1;
+          window.WebSocket.CLOSING = 2;
+          window.WebSocket.CLOSED = 3;
+        }
+
+        window.addEventListener('unhandledrejection', function (e) {
+          var msg = (e.reason && (e.reason.message || e.reason.toString())) || '';
+          if (typeof msg === 'string' && (msg.indexOf('WebSocket') !== -1 || msg.indexOf('vite') !== -1)) {
+            e.preventDefault();
+            e.stopImmediatePropagation && e.stopImmediatePropagation();
+          }
+        });
+        window.addEventListener('error', function (e) {
+          var msg = e.message || '';
+          if (typeof msg === 'string' && (msg.indexOf('WebSocket') !== -1 || msg.indexOf('vite') !== -1)) {
+            e.preventDefault();
+            e.stopImmediatePropagation && e.stopImmediatePropagation();
+          }
+        });
+      })();
+    </script>
+  </head>
+  <body class="bg-slate-50 text-slate-800 antialiased selection:bg-teal-300">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

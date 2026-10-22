@@ -1,0 +1,1568 @@
+<!DOCTYPE html>
+<html lang="id" class="light">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SPRINTER MAHADA - Operasional Lapangan</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#115e59',
+                        secondary: '#475569',
+                        accent: '#0d9488',
+                        darkbg: '#0f172a',
+                        darkcard: '#1e293b'
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+                        'float': '0 10px 25px -5px rgba(13, 148, 136, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar {
+            width: 0px;
+            background: transparent;
+        }
+
+        @media print {
+            body {
+                background: white !important;
+            }
+
+            nav,
+            .glass-nav,
+            .filter-btn,
+            .hide-on-print,
+            #view-home,
+            #view-add,
+            #view-vendor,
+            #view-setting,
+            header,
+            button {
+                display: none !important;
+            }
+
+            #view-report {
+                display: block !important;
+                width: 100% !important;
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+            }
+
+            .print-only {
+                display: block !important;
+            }
+
+            @page {
+                size: A5 portrait;
+                margin: 10mm;
+            }
+
+            * {
+                color: #000 !important;
+                border-color: #ddd !important;
+            }
+        }
+
+        body {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .view-section {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .tab-active {
+            color: #0d9488;
+        }
+
+        .tab-active::after {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: 50%;
+            margin-left: -15px;
+            width: 30px;
+            height: 3px;
+            background-color: #0d9488;
+            border-radius: 0 0 4px 4px;
+        }
+
+        .filter-active {
+            background: linear-gradient(to right, #0d9488, #14b8a6);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 4px 10px rgba(13, 148, 136, 0.3);
+        }
+
+        /* DROPDOWN & SELECT STYLING */
+        select {
+            font-size: 13px;
+        }
+
+        select option {
+            font-size: 14px !important;
+            padding: 10px 14px !important;
+            line-height: 1.6 !important;
+            color: #1e293b;
+            background-color: #ffffff;
+        }
+
+        .dark select option {
+            color: #f1f5f9;
+            background-color: #1e293b;
+        }
+
+        .glass-nav {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .dark .glass-nav {
+            background: rgba(30, 41, 59, 0.95);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Failsafe untuk overlay agar tidak memblokir layar saat disembunyikan */
+        .safe-hidden {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none !important;
+            z-index: -1 !important;
+        }
+    </style>
+</head>
+
+<body
+    class="bg-slate-50 text-slate-800 dark:bg-darkbg dark:text-slate-200 transition-colors duration-300 antialiased selection:bg-teal-300 relative">
+
+    <!-- OVERLAY LOADING (DIJAMIN TIDAK MEMBLOKIR) -->
+    <div id="loadingOverlay" onclick="forceCloseLoading()"
+        class="fixed inset-0 bg-slate-900/80 z-[9999] flex flex-col justify-center items-center backdrop-blur-sm transition-all duration-300 cursor-pointer safe-hidden">
+        <div
+            class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-teal-500 mb-4 shadow-[0_0_15px_rgba(20,184,166,0.5)]">
+        </div>
+        <p class="text-white font-bold animate-pulse tracking-wide" id="loadingText">SINKRONISASI...</p>
+        <p
+            class="text-[10px] text-white/60 mt-6 font-medium tracking-widest bg-black/40 px-4 py-2 rounded-full border border-white/10">
+            (Ketuk di mana saja untuk menutup paksa)</p>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div
+        class="w-full md:max-w-2xl lg:max-w-3xl mx-auto bg-slate-50 dark:bg-darkbg min-h-screen relative pb-28 shadow-2xl overflow-x-hidden border-x border-slate-200 dark:border-slate-800 z-10">
+
+        <!-- HEADER -->
+        <header
+            class="bg-gradient-to-r from-teal-800 via-teal-600 to-emerald-500 text-white p-4 sticky top-0 z-30 shadow-lg">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1
+                        class="text-lg md:text-xl font-black flex items-center gap-2 tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-white to-teal-100 drop-shadow-sm">
+                        <i class="bi bi-briefcase-fill text-white drop-shadow-none"></i> SPRINTER MAHADA
+                    </h1>
+                    <p id="headerCurrentDate"
+                        class="text-xs text-teal-100 font-medium flex items-center gap-1.5 mt-0.5 opacity-90">
+                        <i class="bi bi-calendar3"></i> <span id="headerDateText">-</span>
+                    </p>
+                </div>
+                <button type="button" onclick="toggleDarkMode()"
+                    class="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-sm transition border border-white/10 cursor-pointer">
+                    <i class="bi bi-moon-stars-fill text-lg" id="darkModeIcon"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- VIEW: BERANDA -->
+        <div id="view-home" class="view-section" style="display: block;">
+            <!-- DASHBOARD STATS -->
+            <div
+                class="px-4 pt-4 pb-2 bg-white dark:bg-darkcard rounded-b-[2rem] shadow-sm border-b border-slate-100 dark:border-slate-800">
+                <div
+                    class="mb-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-700/50">
+                    <div class="flex justify-between items-end mb-2">
+                        <div>
+                            <p
+                                class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                                Progress Hari Ini</p>
+                            <h4 class="text-sm font-bold text-slate-700 dark:text-slate-200 mt-0.5"
+                                id="stat-progress-desc">Siap bekerja!</h4>
+                        </div>
+                        <span
+                            class="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-br from-teal-500 to-emerald-500 drop-shadow-sm"
+                            id="stat-progress-text">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden shadow-inner">
+                        <div id="stat-progress-bar"
+                            class="bg-gradient-to-r from-teal-500 via-emerald-400 to-teal-300 h-2.5 rounded-full transition-all duration-1000 ease-out"
+                            style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 mb-4">
+                    <div
+                        class="bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-soft border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center">
+                        <h3 class="text-xl md:text-2xl font-black text-slate-800 dark:text-white" id="stat-total">0</h3>
+                        <p class="text-[10px] font-bold text-slate-400 mt-1 uppercase">Tugas Hari Ini</p>
+                    </div>
+                    <div
+                        class="bg-amber-50 dark:bg-amber-900/10 p-3 rounded-2xl shadow-soft border border-amber-100 dark:border-amber-900/30 flex flex-col items-center justify-center">
+                        <h3 class="text-xl md:text-2xl font-black text-amber-600 dark:text-amber-500" id="stat-proses">0
+                        </h3>
+                        <p class="text-[10px] font-bold text-amber-600/70 dark:text-amber-500/70 mt-1 uppercase">Proses
+                        </p>
+                    </div>
+                    <div
+                        class="bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-2xl shadow-soft border border-emerald-100 dark:border-emerald-900/30 flex flex-col items-center justify-center">
+                        <h3 class="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400"
+                            id="stat-selesai">0</h3>
+                        <p class="text-[10px] font-bold text-emerald-600/70 dark:text-emerald-400/70 mt-1 uppercase">
+                            Selesai</p>
+                    </div>
+                </div>
+
+                <!-- Pengeluaran Card -->
+                <div
+                    class="bg-gradient-to-br from-teal-600 via-teal-500 to-emerald-500 text-white p-4 rounded-2xl shadow-float flex justify-between items-center relative overflow-hidden mb-2">
+                    <div class="absolute top-0 right-0 -mt-4 -mr-4 w-24 h-24 bg-white opacity-10 rounded-full blur-xl">
+                    </div>
+                    <div
+                        class="absolute bottom-0 left-0 -mb-4 -ml-4 w-16 h-16 bg-teal-200 opacity-20 rounded-full blur-lg">
+                    </div>
+                    <div class="relative z-10 w-full flex justify-between items-center">
+                        <div>
+                            <p
+                                class="text-[11px] font-medium text-teal-50 opacity-90 tracking-wide uppercase mb-1 flex items-center gap-1.5">
+                                <i class="bi bi-wallet2"></i> Total Pengeluaran Hari Ini
+                            </p>
+                            <h3 class="text-2xl font-black tracking-tight" id="stat-biaya">Rp 0</h3>
+                        </div>
+                        <div
+                            class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/10">
+                            <i class="bi bi-graph-up-arrow text-xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lokasi Terakhir -->
+                <div
+                    class="mt-3 bg-teal-50 dark:bg-teal-900/20 p-3 rounded-2xl border border-teal-100 dark:border-teal-800/30 flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 bg-teal-100 dark:bg-teal-800 rounded-full flex items-center justify-center text-teal-600 dark:text-teal-300 shrink-0">
+                        <i class="bi bi-geo-alt-fill text-lg"></i>
+                    </div>
+                    <div class="overflow-hidden">
+                        <p
+                            class="text-[10px] font-bold text-teal-500/70 dark:text-teal-400/70 uppercase tracking-widest">
+                            Lokasi Terakhir (Selesai)</p>
+                        <p class="text-sm font-bold text-slate-700 dark:text-slate-200 truncate mt-0.5"
+                            id="stat-lokasi-terakhir">Belum ada aktivitas</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SEARCH & FILTER -->
+            <div
+                class="px-4 py-3 sticky top-[72px] z-20 bg-slate-50/95 dark:bg-darkbg/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
+                <div class="relative mb-3 group">
+                    <span
+                        class="absolute inset-y-0 left-0 flex items-center pl-3.5 transition-colors group-focus-within:text-teal-500">
+                        <i class="bi bi-search text-slate-400"></i>
+                    </span>
+                    <input type="text" id="searchInput" onkeyup="renderTaskList()" placeholder="Cari tugas, tujuan..."
+                        class="w-full pl-10 pr-4 py-3 rounded-2xl bg-white dark:bg-darkcard border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/50 text-sm shadow-sm">
+                </div>
+                <div class="flex overflow-x-auto gap-2 pb-1 snap-x scrollbar-hide -mx-4 px-4">
+                    <button type="button" onclick="setFilter('Pending')" id="filter-Pending"
+                        class="filter-btn filter-active whitespace-nowrap px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all snap-start shadow-sm cursor-pointer">Pending</button>
+                    <button type="button" onclick="setFilter('Dalam Perjalanan')" id="filter-Dalam Perjalanan"
+                        class="filter-btn whitespace-nowrap px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all snap-start text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 shadow-sm cursor-pointer">Diproses</button>
+                    <button type="button" onclick="setFilter('Selesai')" id="filter-Selesai"
+                        class="filter-btn whitespace-nowrap px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all snap-start text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 shadow-sm cursor-pointer">Selesai</button>
+                    <button type="button" onclick="setFilter('Gagal')" id="filter-Gagal"
+                        class="filter-btn whitespace-nowrap px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all snap-start text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 shadow-sm cursor-pointer">Batal</button>
+                    <button type="button" onclick="setFilter('Semua')" id="filter-Semua"
+                        class="filter-btn whitespace-nowrap px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all snap-start text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 shadow-sm cursor-pointer">Semua</button>
+                </div>
+            </div>
+
+            <!-- TASK LIST -->
+            <div id="taskList" class="p-4 space-y-4"></div>
+
+            <!-- EMPTY STATE -->
+            <div id="emptyState" style="display: none;"
+                class="flex-col items-center justify-center p-12 text-center text-slate-500">
+                <div
+                    class="w-24 h-24 bg-teal-50 dark:bg-teal-900/20 rounded-full flex items-center justify-center mb-5 shadow-inner">
+                    <i class="bi bi-inbox text-4xl text-teal-300 dark:text-teal-600"></i>
+                </div>
+                <p class="font-bold text-lg text-slate-700 dark:text-slate-200">Kosong!</p>
+                <p class="text-sm mt-1 text-slate-500">Daftar tugas Anda bersih.</p>
+            </div>
+        </div>
+
+        <!-- VIEW: VENDOR -->
+        <div id="view-vendor" class="view-section">
+            <div
+                class="px-4 py-4 bg-white dark:bg-darkcard border-b dark:border-slate-800 sticky top-[72px] z-20 flex justify-between items-center shadow-sm">
+                <h2 class="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
+                    <i class="bi bi-shop text-teal-500"></i> Database Vendor
+                </h2>
+                <button type="button" onclick="openVendorModal()"
+                    class="bg-gradient-to-r from-teal-600 to-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md cursor-pointer">
+                    <i class="bi bi-plus-lg"></i> Tambah
+                </button>
+            </div>
+            <div class="p-4">
+                <div class="relative mb-4">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-4"><i
+                            class="bi bi-search text-slate-400"></i></span>
+                    <input type="text" id="searchVendorInput" onkeyup="renderVendorList()" placeholder="Cari vendor..."
+                        class="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-2xl bg-white dark:bg-darkcard dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm shadow-sm">
+                </div>
+                <div id="vendorList" class="space-y-3"></div>
+                <div id="vendorEmptyState" style="display: none;"
+                    class="flex-col items-center justify-center p-10 text-center">
+                    <div
+                        class="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
+                        <i class="bi bi-shop text-3xl text-slate-400"></i>
+                    </div>
+                    <p class="font-bold text-slate-700 dark:text-slate-300">Belum ada data vendor</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW: TAMBAH TUGAS -->
+        <div id="view-add" class="view-section p-5">
+            <h2 class="text-2xl font-black mb-6 text-slate-800 dark:text-white flex items-center gap-2">Buat Tugas Baru
+                <i class="bi bi-stars text-amber-500"></i>
+            </h2>
+            <form id="formAddTask" onsubmit="handleSaveTask(event)"
+                class="bg-white dark:bg-darkcard p-5 rounded-3xl shadow-soft border border-slate-100 dark:border-slate-800">
+                <div class="space-y-5">
+                    <div>
+                        <label
+                            class="block text-xs font-bold mb-1.5 text-slate-600 dark:text-slate-400 uppercase tracking-wide">Pilih
+                            Karyawan *</label>
+                        <select id="inputTaskKaryawan" required
+                            class="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 font-medium"></select>
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-bold mb-1.5 text-slate-600 dark:text-slate-400 uppercase tracking-wide">Kegiatan
+                            / Judul *</label>
+                        <input type="text" id="inputJudul" required
+                            class="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 font-medium"
+                            placeholder="Contoh: Ambil Dokumen Pajak">
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-bold mb-1.5 text-slate-600 dark:text-slate-400 uppercase tracking-wide">No
+                            Invoice / Resi</label>
+                        <input type="text" id="inputInvoice"
+                            class="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 font-medium"
+                            placeholder="Contoh: INV-2026/01...">
+                    </div>
+                    <div>
+                        <label
+                            class="block text-xs font-bold mb-1.5 text-slate-600 dark:text-slate-400 uppercase tracking-wide">Kategori</label>
+                        <select id="inputKategori"
+                            class="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 font-medium"></select>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4">
+                        <div
+                            class="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 space-y-2.5">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <label
+                                    class="block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wide">
+                                    <i class="bi bi-geo mr-1"></i> Dari (Lokasi Asal)
+                                </label>
+                                <select id="inputPilihVendorDari" onchange="autoFillVendorDari()"
+                                    class="text-xs font-bold py-2 px-3 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-darkcard text-slate-700 dark:text-slate-200 cursor-pointer shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50">
+                                    <option value="">-- Auto-fill Vendor --</option>
+                                </select>
+                            </div>
+                            <input type="text" id="inputDari"
+                                class="w-full p-3.5 border border-slate-200 rounded-xl bg-white dark:bg-darkcard dark:border-slate-700 font-medium text-sm"
+                                placeholder="Cth: Kantor / Vendor A...">
+                        </div>
+
+                        <div
+                            class="p-4 rounded-2xl border border-teal-100 dark:border-teal-800/30 bg-teal-50/30 dark:bg-teal-900/10 space-y-2.5">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <label
+                                    class="block text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wide">
+                                    <i class="bi bi-geo-alt-fill mr-1"></i> Ke (Lokasi Tujuan) *
+                                </label>
+                                <select id="inputPilihVendor" onchange="autoFillVendor()"
+                                    class="text-xs font-bold py-2 px-3 border border-teal-200 dark:border-teal-700 rounded-xl bg-white dark:bg-darkcard text-teal-700 dark:text-teal-300 cursor-pointer shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50">
+                                    <option value="">-- Auto-fill Vendor --</option>
+                                </select>
+                            </div>
+                            <textarea id="inputTujuan" required rows="2"
+                                class="w-full p-3.5 border border-teal-100 rounded-xl bg-white dark:bg-darkcard dark:border-slate-700 font-medium text-sm"
+                                placeholder="Alamat lengkap..."></textarea>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-bold mb-1.5 text-slate-600 dark:text-slate-400 uppercase tracking-wide">Prioritas
+                                *</label>
+                            <select id="inputPrioritas" required
+                                class="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 font-medium">
+                                <option value="Standar">Standar</option>
+                                <option value="Urgent">Urgent</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label
+                                class="block text-xs font-bold mb-1.5 text-slate-600 dark:text-slate-400 uppercase tracking-wide">Kontak/PIC</label>
+                            <input type="text" id="inputPIC"
+                                class="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 font-medium"
+                                placeholder="Nama">
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-bold mb-1.5 text-slate-600 dark:text-slate-400 uppercase tracking-wide">No.
+                                HP / WA</label>
+                            <input type="tel" id="inputHP"
+                                class="w-full p-3.5 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 font-medium"
+                                placeholder="0812...">
+                        </div>
+                    </div>
+                    <div class="pt-4 mt-2">
+                        <button type="submit"
+                            class="w-full bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-black py-4 rounded-2xl shadow-float flex justify-center items-center gap-2 text-lg cursor-pointer">
+                            <i class="bi bi-send-fill"></i> Simpan Tugas
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- VIEW: LAPORAN -->
+        <div id="view-report" class="view-section p-5">
+            <h2 class="text-2xl font-black mb-6 text-slate-800 dark:text-white flex items-center gap-2"><i
+                    class="bi bi-pie-chart-fill text-teal-500"></i> Laporan Harian</h2>
+            <div
+                class="bg-white dark:bg-darkcard p-4 rounded-3xl shadow-soft border border-slate-100 dark:border-slate-800 mb-5 flex gap-3 items-end">
+                <div class="flex-1 hide-on-print">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Karyawan</label>
+                    <select id="filterReportKaryawan" onchange="updateReportStats()"
+                        class="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                        <option value="ALL">Semua</option>
+                    </select>
+                </div>
+                <div class="flex-1 hide-on-print">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Tanggal</label>
+                    <input type="date" id="filterReportDate" onchange="onReportDateChange()"
+                        class="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                </div>
+                <button type="button" onclick="resetReportFilter()"
+                    class="h-[46px] px-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl cursor-pointer hide-on-print"><i
+                        class="bi bi-arrow-clockwise"></i></button>
+            </div>
+            <div
+                class="bg-white dark:bg-darkcard rounded-3xl shadow-soft border border-slate-100 dark:border-slate-800 overflow-hidden mb-6">
+                <div
+                    class="p-5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center hide-on-print">
+                    <span class="font-bold text-slate-700 dark:text-slate-300">Arus Kas</span>
+                    <div
+                        class="w-8 h-8 bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-full flex items-center justify-center">
+                        <i class="bi bi-wallet2"></i>
+                    </div>
+                </div>
+                <div class="p-5 space-y-4">
+                    <div class="grid grid-cols-2 gap-4 hide-on-print mb-2">
+                        <div>
+                            <label
+                                class="block text-xs font-bold mb-1.5 text-slate-500 dark:text-slate-400 uppercase">Yg
+                                Merekap</label>
+                            <select id="inputRekapKaryawan" onchange="autoSaveRecap()"
+                                class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-700 text-sm cursor-pointer">
+                            </select>
+                        </div>
+                        <div>
+                            <label
+                                class="block text-xs font-bold mb-1.5 text-slate-500 dark:text-slate-400 uppercase">Cash
+                                Hari Ini</label>
+                            <input type="number" id="inputUangCash" onkeyup="updateReportStats()"
+                                onblur="autoSaveRecap()"
+                                class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 font-mono font-black text-teal-700 text-base"
+                                placeholder="0">
+                        </div>
+                    </div>
+
+                    <div class="print-only mb-4 hidden">
+                        <h2 class="text-lg font-black mb-1">Laporan Operasional (Sprinter)</h2>
+                        <p class="text-xs font-bold text-slate-600">Tanggal: <span id="printDate"></span> | PIC: <span
+                                id="printPic"></span></p>
+                    </div>
+
+                    <div class="flex justify-between items-center border-b border-dashed border-slate-200 pb-3 pt-1">
+                        <span class="text-slate-500 font-medium text-sm">Modal Awal / Cash</span>
+                        <span class="font-black text-slate-700 text-lg" id="kas-modal">Rp 0</span>
+                    </div>
+                    <div class="flex justify-between items-center border-b border-dashed border-slate-200 pb-3 pt-1">
+                        <span class="text-slate-500 font-medium text-sm">Total Pengeluaran</span>
+                        <span class="font-black text-rose-500 text-lg" id="kas-pengeluaran">Rp 0</span>
+                    </div>
+                    <div
+                        class="flex justify-between items-center pt-2 pb-2 px-3 bg-amber-50 rounded-xl mt-2 border border-amber-100">
+                        <span class="text-amber-800 font-bold text-sm">Sisa Uang (Kembalian)</span>
+                        <span class="font-black text-2xl text-amber-600" id="kas-sisa">Rp 0</span>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white rounded-3xl shadow-soft border border-slate-100 overflow-hidden mb-6"
+                style="break-inside: avoid;">
+                <div class="p-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                    <span class="font-bold text-slate-700">Rincian Kegiatan (Biaya > 0)</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead class="bg-slate-100/50 text-[10px] text-slate-500 uppercase tracking-wider">
+                            <tr>
+                                <th class="p-3 font-bold border-b border-slate-200">No. Inv</th>
+                                <th class="p-3 font-bold border-b border-slate-200">Kegiatan</th>
+                                <th class="p-3 font-bold border-b border-slate-200">Kategori</th>
+                                <th class="p-3 font-bold border-b border-slate-200 text-right">Biaya (Rp)</th>
+                                <th class="p-3 font-bold border-b border-slate-200 hide-on-print w-10"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportTableBody" class="text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="space-y-4 hide-on-print">
+                <button type="button" onclick="printReportPDF()"
+                    class="w-full bg-slate-800 text-white font-bold py-4 rounded-2xl shadow-md flex justify-center items-center gap-2 cursor-pointer"><i
+                        class="bi bi-file-earmark-pdf-fill text-lg"></i> Unduh Laporan PDF (A5)</button>
+                <button type="button" onclick="clearAllData()"
+                    class="w-full bg-white border-2 border-rose-100 text-rose-600 font-bold py-4 rounded-2xl flex justify-center items-center gap-2 cursor-pointer"><i
+                        class="bi bi-trash3-fill"></i> Bersihkan Data Hari Ini</button>
+            </div>
+        </div>
+
+        <!-- VIEW: PENGATURAN -->
+        <div id="view-setting" class="view-section p-5">
+            <h2 class="text-2xl font-black mb-6 text-slate-800 dark:text-white flex items-center gap-2"><i
+                    class="bi bi-gear-fill text-teal-500"></i> Pengaturan</h2>
+            <div
+                class="bg-white dark:bg-darkcard p-5 rounded-3xl shadow-soft border border-slate-100 dark:border-slate-800 mb-6">
+                <h3 class="font-bold text-slate-800 dark:text-white mb-4"><i
+                        class="bi bi-people-fill text-teal-400"></i> Kelola Karyawan</h3>
+                <div
+                    class="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 mb-4">
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <input type="text" id="inputUserId"
+                            class="p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm"
+                            placeholder="ID (EMP-01)">
+                        <input type="text" id="inputUserName"
+                            class="p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm"
+                            placeholder="Nama">
+                    </div>
+                    <div class="flex gap-2">
+                        <select id="inputUserRole"
+                            class="flex-1 p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm">
+                            <option value="Sprinter">Sprinter</option>
+                            <option value="Produksi">Produksi</option>
+                        </select>
+                        <button type="button" onclick="addUser()"
+                            class="bg-teal-600 text-white px-5 rounded-xl font-bold text-sm cursor-pointer">Tambah</button>
+                    </div>
+                </div>
+                <div
+                    class="overflow-x-auto border border-slate-100 dark:border-slate-700 rounded-xl max-h-60 overflow-y-auto">
+                    <table class="w-full text-left">
+                        <tbody id="userList" class="text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div
+                class="bg-white dark:bg-darkcard p-5 rounded-3xl shadow-soft border border-slate-100 dark:border-slate-800 mb-6">
+                <h3 class="font-bold text-slate-800 dark:text-white mb-4"><i class="bi bi-tags-fill text-teal-400"></i>
+                    Kelola Kategori</h3>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="inputNewCategory"
+                        class="flex-1 p-3 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 text-sm"
+                        placeholder="Nama kategori...">
+                    <button type="button" onclick="addCategory()"
+                        class="bg-teal-600 text-white px-4 rounded-xl font-bold cursor-pointer">Tambah</button>
+                </div>
+                <div id="categoryList" class="space-y-2 max-h-60 overflow-y-auto"></div>
+            </div>
+        </div>
+
+    </div> <!-- END MAIN CONTAINER -->
+
+    <!-- BOTTOM NAVIGATION (DIPERBAIKI POSISI AGAR HITBOX MANTAP) -->
+    <nav
+        class="fixed bottom-0 left-0 right-0 mx-auto w-full md:max-w-2xl lg:max-w-3xl glass-nav flex justify-around shadow-[0_-10px_30px_-10px_rgba(0,0,0,0.1)] z-[100] pt-2 pb-4 px-2 rounded-t-3xl md:rounded-3xl md:bottom-4">
+        <button type="button" onclick="switchTab('home')" id="nav-home"
+            class="relative flex-1 py-2 flex flex-col items-center gap-1.5 tab-active transition-colors text-slate-400 cursor-pointer">
+            <i class="bi bi-grid-fill text-xl"></i><span class="text-[10px] font-bold tracking-wide">Tugas</span>
+        </button>
+        <button type="button" onclick="switchTab('vendor')" id="nav-vendor"
+            class="relative flex-1 py-2 flex flex-col items-center gap-1.5 text-slate-400 hover:text-teal-500 transition-colors cursor-pointer">
+            <i class="bi bi-shop-window text-xl"></i><span class="text-[10px] font-bold tracking-wide">Vendor</span>
+        </button>
+        <div class="relative flex-1 flex justify-center">
+            <button type="button" onclick="switchTab('add')" id="nav-add"
+                class="absolute -top-10 w-14 h-14 bg-gradient-to-tr from-teal-600 to-emerald-500 text-white rounded-full flex items-center justify-center shadow-float border-4 border-white dark:border-[#0f172a] cursor-pointer">
+                <i class="bi bi-plus-lg text-2xl"></i>
+            </button>
+            <span class="absolute bottom-1 text-[10px] font-bold tracking-wide text-slate-400">Baru</span>
+        </div>
+        <button type="button" onclick="switchTab('report')" id="nav-report"
+            class="relative flex-1 py-2 flex flex-col items-center gap-1.5 text-slate-400 hover:text-teal-500 transition-colors cursor-pointer">
+            <i class="bi bi-wallet-fill text-xl"></i><span class="text-[10px] font-bold tracking-wide">Rekap</span>
+        </button>
+        <button type="button" onclick="switchTab('setting')" id="nav-setting"
+            class="relative flex-1 py-2 flex flex-col items-center gap-1.5 text-slate-400 hover:text-teal-500 transition-colors cursor-pointer">
+            <i class="bi bi-gear-fill text-xl"></i><span class="text-[10px] font-bold tracking-wide">Seting</span>
+        </button>
+    </nav>
+
+    <!-- MODAL UPDATE STATUS -->
+    <div id="modalStatus" style="display: none;" onclick="if(event.target === this) closeModal()"
+        class="fixed inset-0 bg-slate-900/60 z-[9000] justify-center items-end backdrop-blur-sm transition-opacity safe-hidden">
+        <div class="bg-white dark:bg-darkcard w-full max-w-md md:max-w-lg rounded-t-[2rem] md:rounded-[2rem] p-5 md:p-6 shadow-2xl md:mb-10"
+            id="modalStatusContent">
+            <div class="flex justify-between items-center mb-5 border-b border-slate-100 dark:border-slate-800 pb-4">
+                <h3 class="font-black text-xl text-slate-800 dark:text-white"><i
+                        class="bi bi-arrow-repeat text-teal-500"></i> Update Progress</h3>
+                <button type="button" onclick="closeModal()"
+                    class="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex justify-center items-center text-slate-500 cursor-pointer"><i
+                        class="bi bi-x-lg"></i></button>
+            </div>
+            <input type="hidden" id="modalTaskId">
+            <div class="bg-teal-50/50 dark:bg-teal-900/10 p-4 rounded-2xl mb-5">
+                <p class="text-sm font-black" id="modalTaskJudul"></p>
+                <p class="text-xs text-slate-500 mt-1" id="modalTaskTujuan"></p>
+            </div>
+            <div class="mb-4 space-y-3">
+                <div><label class="block text-xs font-bold mb-1">Total Biaya Keluar (Rp)</label><input type="number"
+                        id="inputModalBiaya"
+                        class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-600 font-black text-teal-700"
+                        placeholder="0"></div>
+                <div><label class="block text-xs font-bold mb-1">Keterangan Biaya</label><input type="text"
+                        id="inputModalKetBiaya"
+                        class="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-900/50 dark:border-slate-600 text-sm">
+                </div>
+            </div>
+            <h4 class="text-xs font-bold mb-2 text-slate-500">Ubah Status:</h4>
+            <div class="grid grid-cols-2 gap-3 mb-5">
+                <button type="button" onclick="selectStatus('Pending')" id="btnStatus-Pending"
+                    class="status-select-btn py-3 border border-slate-200 rounded-xl font-bold text-sm cursor-pointer">Pending</button>
+                <button type="button" onclick="selectStatus('Dalam Perjalanan')" id="btnStatus-Dalam Perjalanan"
+                    class="status-select-btn py-3 border border-amber-200 rounded-xl font-bold text-amber-700 bg-amber-50 text-sm cursor-pointer">Proses</button>
+                <button type="button" onclick="selectStatus('Selesai')" id="btnStatus-Selesai"
+                    class="status-select-btn py-3 border border-emerald-200 rounded-xl font-bold text-emerald-700 bg-emerald-50 text-sm cursor-pointer">Selesai</button>
+                <button type="button" onclick="selectStatus('Gagal')" id="btnStatus-Gagal"
+                    class="status-select-btn py-3 border border-rose-200 rounded-xl font-bold text-rose-700 bg-rose-50 text-sm cursor-pointer">Batal</button>
+            </div>
+            <div id="podForm" style="display: none;"
+                class="space-y-4 mb-6 p-4 border border-slate-200 rounded-2xl bg-slate-50 dark:bg-slate-800">
+                <div><label class="block text-xs font-bold mb-1">Penerima</label><input type="text"
+                        id="inputModalPenerima" class="w-full p-3 border rounded-xl text-sm"></div>
+                <div><label class="block text-xs font-bold mb-1">Catatan *</label><textarea id="inputModalCatatan"
+                        rows="2" class="w-full p-3 border rounded-xl text-sm"></textarea></div>
+            </div>
+            <button type="button" onclick="saveStatusUpdate()"
+                class="w-full bg-gradient-to-r from-teal-600 to-emerald-500 text-white font-black py-4 rounded-2xl cursor-pointer">Simpan
+                Status</button>
+        </div>
+    </div>
+
+    <!-- MODAL VENDOR -->
+    <div id="modalVendor" style="display: none;" onclick="if(event.target === this) closeVendorModal()"
+        class="fixed inset-0 bg-slate-900/60 z-[9000] justify-center items-end backdrop-blur-sm transition-opacity safe-hidden">
+        <div class="bg-white dark:bg-darkcard w-full max-w-md md:max-w-lg rounded-t-[2rem] md:rounded-[2rem] p-5 md:p-6 shadow-2xl md:mb-10"
+            id="modalVendorContent">
+            <div class="flex justify-between items-center mb-5 border-b border-slate-100 dark:border-slate-800 pb-4">
+                <h3 class="font-black text-xl text-slate-800 dark:text-white" id="modalVendorTitle">Vendor</h3>
+                <button type="button" onclick="closeVendorModal()"
+                    class="w-8 h-8 rounded-full bg-slate-100 flex justify-center items-center text-slate-500 cursor-pointer"><i
+                        class="bi bi-x-lg"></i></button>
+            </div>
+            <form id="formVendor" onsubmit="saveVendor(event)">
+                <input type="hidden" id="inputVendorId">
+                <div class="space-y-4 mb-6">
+                    <div><label class="block text-xs font-bold mb-1">Nama *</label><input type="text"
+                            id="inputVendorNama" required class="w-full p-3 border rounded-xl"></div>
+                    <div><label class="block text-xs font-bold mb-1">HP / WA</label><input type="tel" id="inputVendorHP"
+                            class="w-full p-3 border rounded-xl"></div>
+                    <div><label class="block text-xs font-bold mb-1">Alamat *</label><textarea id="inputVendorAlamat"
+                            required rows="2" class="w-full p-3 border rounded-xl"></textarea></div>
+                </div>
+                <button type="submit"
+                    class="w-full bg-teal-600 text-white font-black py-4 rounded-2xl cursor-pointer">Simpan
+                    Vendor</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL EDIT TUGAS -->
+    <div id="modalEditTask" style="display: none;" onclick="if(event.target === this) closeEditModal()"
+        class="fixed inset-0 bg-slate-900/60 z-[9000] justify-center items-end backdrop-blur-sm transition-opacity safe-hidden">
+        <div class="bg-white dark:bg-darkcard w-full max-w-md md:max-w-lg rounded-t-[2rem] md:rounded-[2rem] p-5 md:p-6 shadow-2xl md:mb-10"
+            id="modalEditTaskContent">
+            <div class="flex justify-between items-center mb-5 border-b border-slate-100 dark:border-slate-800 pb-4">
+                <h3 class="font-black text-xl text-slate-800 dark:text-white"><i
+                        class="bi bi-pencil-square text-amber-500"></i> Edit Tugas</h3>
+                <button type="button" onclick="closeEditModal()"
+                    class="w-8 h-8 rounded-full bg-slate-100 flex justify-center items-center text-slate-500 cursor-pointer"><i
+                        class="bi bi-x-lg"></i></button>
+            </div>
+            <input type="hidden" id="editTaskId">
+            <div class="space-y-3 mb-6">
+                <div><label class="block text-xs font-bold mb-1">Judul</label><input type="text" id="editTaskJudul"
+                        class="w-full p-3 border rounded-xl"></div>
+                <div><label class="block text-xs font-bold mb-1">Invoice</label><input type="text" id="editTaskInvoice"
+                        class="w-full p-3 border rounded-xl"></div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="block text-xs font-bold mb-1">Dari</label><input type="text" id="editTaskDari"
+                            class="w-full p-3 border rounded-xl"></div>
+                    <div><label class="block text-xs font-bold mb-1">Prioritas</label>
+                        <select id="editTaskPrioritas" class="w-full p-3 border rounded-xl">
+                            <option value="Standar">Standar</option>
+                            <option value="Urgent">Urgent</option>
+                        </select>
+                    </div>
+                </div>
+                <div><label class="block text-xs font-bold mb-1">Karyawan</label><select id="editTaskKaryawan"
+                        class="w-full p-3 border rounded-xl"></select></div>
+                <div><label class="block text-xs font-bold mb-1">Kategori</label><select id="editTaskKategori"
+                        class="w-full p-3 border rounded-xl"></select></div>
+                <div><label class="block text-xs font-bold mb-1">Biaya (Rp)</label><input type="number"
+                        id="editTaskBiaya" class="w-full p-3 border rounded-xl font-black text-teal-700"></div>
+            </div>
+            <button type="button" onclick="saveEditTask()"
+                class="w-full bg-amber-500 text-white font-black py-4 rounded-2xl cursor-pointer">Simpan
+                Perbaikan</button>
+            <button type="button" onclick="deleteTaskClient()"
+                class="w-full mt-3 bg-white text-rose-600 border border-rose-200 font-bold py-3 rounded-2xl cursor-pointer">Hapus
+                Tugas</button>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT -->
+    <script>
+        console.log("Sprinter App starting...");
+        let db = { tasks: [], vendors: [], categories: [], users: [] };
+        let currentFilter = 'Pending';
+        let selectedStatusForModal = '';
+        let loadingTimeout;
+
+        const dummyData = [{ ID: "TSK-01", Karyawan: "Budi (Sprinter)", JudulTugas: "Beli ATK", Invoice: "INV-01", Kategori: "Lainnya", Tujuan: "Toko Buku", PIC: "Kasir", NoHP: "", Biaya: 25000, KeteranganBiaya: "Kertas", Status: "Selesai", WaktuUpdate: "2026-07-09 10:00:00", Penerima: "Kasir", Catatan: "Ok" }];
+        const defaultCategories = ["Pengiriman", "Pembelian", "Setor Bank", "Lainnya"];
+
+        const isGasEnv = (typeof google !== 'undefined' && google !== null && typeof google.script !== 'undefined');
+
+        function runServerTask(funcName, args, onSuccess, onError) {
+            if (!isGasEnv) return false;
+            try {
+                let runner = google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onError);
+                if (args !== undefined && args !== null) runner[funcName](args); else runner[funcName]();
+                return true;
+            } catch (e) { onError(e); return true; }
+        }
+
+        function safeAlert(title, message, icon) {
+            if (typeof Swal !== 'undefined') Swal.fire(title, message, icon);
+            else alert(title + "\n\n" + message);
+        }
+
+        function showToast(message) {
+            if (typeof Swal !== 'undefined') {
+                Swal.mixin({ toast: true, position: 'top', showConfirmButton: false, timer: 2000 }).fire({ icon: 'success', title: message });
+            } else alert(message);
+        }
+
+        // --- SISTEM LOADING ANTI MACET ---
+        function startLoading(text) {
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                document.getElementById('loadingText').innerText = text || "MEMUAT...";
+                overlay.classList.remove('safe-hidden');
+                overlay.style.display = 'flex';
+
+                clearTimeout(loadingTimeout);
+                // TIMEOUT OTOMATIS 10 DETIK JIKA SERVER HANG
+                loadingTimeout = setTimeout(function () {
+                    endLoading();
+                    console.warn("Loading timeout dihentikan paksa.");
+                }, 10000);
+            }
+        }
+
+        function endLoading() {
+            clearTimeout(loadingTimeout);
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.style.display = 'none';
+                overlay.classList.add('safe-hidden');
+            }
+        }
+
+        function forceCloseLoading() { endLoading(); }
+
+        // MENGHINDARI BUG TANGGAL DI HP LAMA
+        function getJakartaTime() {
+            const d = new Date();
+            const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0');
+            const h = String(d.getHours()).padStart(2, '0'); const min = String(d.getMinutes()).padStart(2, '0'); const s = String(d.getSeconds()).padStart(2, '0');
+            return y + "-" + m + "-" + day + " " + h + ":" + min + ":" + s;
+        }
+
+        function initApp() {
+            updateHeaderDate();
+            try {
+                const dateEl = document.getElementById('filterReportDate');
+                if (dateEl) dateEl.value = getJakartaTime().split(' ')[0];
+            } catch (e) { }
+
+            try {
+                let isDark = localStorage.getItem('theme') === 'dark';
+                if (isDark) { document.documentElement.classList.add('dark'); document.getElementById('darkModeIcon').className = 'bi bi-sun-fill text-lg text-amber-300'; }
+            } catch (e) { }
+
+            loadData();
+            setInterval(loadDataSilent, 15000);
+        }
+
+        function loadDataSilent() {
+            if (isGasEnv) {
+                runServerTask('getAllData', null,
+                    function (res) {
+                        try {
+                            if (res) db = res;
+                            if (!db.tasks) db.tasks = []; if (!db.users) db.users = []; if (!db.categories) db.categories = defaultCategories.slice(); if (!db.vendors) db.vendors = [];
+
+                            const m1 = document.getElementById('modalStatus');
+                            const m2 = document.getElementById('modalVendor');
+                            const m3 = document.getElementById('modalEditTask');
+                            const isModalOpen = (m1 && m1.style.display !== 'none') || (m2 && m2.style.display !== 'none') || (m3 && m3.style.display !== 'none');
+
+                            const viewAdd = document.getElementById('view-add');
+                            const viewSetting = document.getElementById('view-setting');
+                            const isFormViewActive = (viewAdd && viewAdd.style.display === 'block') || (viewSetting && viewSetting.style.display === 'block');
+
+                            // Hanya re-render jika tidak ada modal atau form utama yang terbuka
+                            if (!isModalOpen && !isFormViewActive) {
+                                renderUI();
+                            }
+                        } catch (e) { }
+                    },
+                    function (err) { /* Abaikan error agar tidak muncul alert popup */ }
+                );
+            }
+        }
+
+        function loadData() {
+            startLoading("SINKRONISASI...");
+            if (isGasEnv) {
+                runServerTask('getAllData', null,
+                    function (res) {
+                        try {
+                            if (res) db = res;
+                            if (!db.tasks) db.tasks = []; if (!db.users) db.users = []; if (!db.categories) db.categories = defaultCategories.slice(); if (!db.vendors) db.vendors = [];
+                            renderUI();
+                        } catch (e) { } finally { endLoading(); }
+                    },
+                    function (err) { endLoading(); safeAlert('Gagal', 'Server: ' + err.message, 'error'); }
+                );
+            } else {
+                setTimeout(function () {
+                    try { let saved = localStorage.getItem('ops_dummy_db'); if (saved) db = JSON.parse(saved); } catch (e) { }
+                    if (!db.tasks) db.tasks = dummyData.slice(); if (!db.categories) db.categories = defaultCategories.slice();
+                    try { renderUI(); } catch (e) { } finally { endLoading(); }
+                }, 500);
+            }
+        }
+
+        function updateHeaderDate() {
+            try {
+                const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+                const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+                const d = new Date();
+                const dayName = days[d.getDay()];
+                const date = d.getDate();
+                const monthName = months[d.getMonth()];
+                const year = d.getFullYear();
+                const formatted = dayName + ', ' + date + ' ' + monthName + ' ' + year;
+                const el = document.getElementById('headerDateText');
+                if (el) el.innerText = formatted;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderUI() {
+            updateHeaderDate(); updateDashboardStats(); updateReportStats(); renderTaskList(); renderVendorList(); populateVendorSelect(); renderCategories(); renderUsers();
+        }
+
+        function saveToSim(msg) {
+            if (!isGasEnv) { try { localStorage.setItem('ops_dummy_db', JSON.stringify(db)); } catch (e) { } renderUI(); endLoading(); showToast(msg); }
+        }
+
+        function switchTab(tabId) {
+            const views = ['home', 'vendor', 'add', 'report', 'setting'];
+            for (let i = 0; i < views.length; i++) {
+                const el = document.getElementById('view-' + views[i]);
+                if (el) el.style.display = (views[i] === tabId) ? 'block' : 'none';
+            }
+            const navBtns = ['home', 'vendor', 'report', 'setting'];
+            for (let i = 0; i < navBtns.length; i++) {
+                const btn = document.getElementById('nav-' + navBtns[i]);
+                if (btn) { btn.classList.remove('tab-active', 'text-teal-500'); btn.classList.add('text-slate-400'); }
+            }
+            if (tabId !== 'add') {
+                const activeBtn = document.getElementById('nav-' + tabId);
+                if (activeBtn) { activeBtn.classList.add('tab-active', 'text-teal-500'); activeBtn.classList.remove('text-slate-400'); }
+            }
+            if (tabId === 'home') renderUI(); if (tabId === 'report') { updateDashboardStats(); updateReportStats(); }
+        }
+
+        function setFilter(status) {
+            currentFilter = status;
+            const btns = document.querySelectorAll('.filter-btn');
+            for (let i = 0; i < btns.length; i++) {
+                btns[i].classList.remove('filter-active');
+                btns[i].classList.add('bg-white', 'dark:bg-slate-800', 'text-slate-600', 'dark:text-slate-300');
+            }
+            const active = document.getElementById('filter-' + status);
+            if (active) {
+                active.classList.remove('bg-white', 'dark:bg-slate-800', 'text-slate-600', 'dark:text-slate-300');
+                active.classList.add('filter-active');
+            }
+            renderTaskList();
+        }
+
+        function resetReportFilter() {
+            document.getElementById('filterReportKaryawan').value = 'ALL';
+            document.getElementById('filterReportDate').value = getJakartaTime().split(' ')[0];
+            onReportDateChange();
+        }
+
+        function toggleDarkMode() {
+            try { const h = document.documentElement; h.classList.toggle('dark'); localStorage.setItem('theme', h.classList.contains('dark') ? 'dark' : 'light'); } catch (e) { }
+        }
+
+        function updateDashboardStats() {
+            const todayStr = getJakartaTime().split(' ')[0];
+            let totalHariIni = 0;
+            let selHariIni = 0;
+            let prosHariIni = 0;
+            let byaHariIni = 0;
+            let lastLokasi = "Belum ada aktivitas";
+            let lastTime = "";
+
+            for (let i = 0; i < db.tasks.length; i++) {
+                let t = db.tasks[i];
+                let isToday = (t.WaktuUpdate && String(t.WaktuUpdate).indexOf(todayStr) === 0);
+
+                if (t.Status === 'Pending') {
+                    // Tugas Pending (hari ini maupun bawaan hari sebelumnya) tetap dihitung sebagai tugas aktif
+                    totalHariIni++;
+                } else if (t.Status === 'Dalam Perjalanan') {
+                    // Tugas yang masih diproses/dalam perjalanan tetap dihitung
+                    totalHariIni++;
+                    prosHariIni++;
+                } else if (t.Status === 'Selesai') {
+                    // Tugas selesai hanya dihitung ke capaian & biaya jika diselesaikan hari ini
+                    if (isToday) {
+                        totalHariIni++;
+                        selHariIni++;
+                        byaHariIni += Number(t.Biaya) || 0;
+                    }
+                    if (t.WaktuUpdate >= lastTime) {
+                        lastTime = t.WaktuUpdate;
+                        let tJam = t.WaktuUpdate.split(" ")[1] || "";
+                        if (tJam) tJam = tJam.substring(0, 5);
+                        lastLokasi = t.Tujuan + (tJam ? " (" + tJam + ")" : "");
+                    }
+                } else if (t.Status === 'Gagal' || t.Status === 'Batal') {
+                    // Tugas batal/gagal dihitung jika terjadi hari ini
+                    if (isToday) {
+                        totalHariIni++;
+                    }
+                }
+            }
+
+            let elTot = document.getElementById('stat-total'); if (elTot) elTot.innerText = totalHariIni;
+            let elSel = document.getElementById('stat-selesai'); if (elSel) elSel.innerText = selHariIni;
+            let elPro = document.getElementById('stat-proses'); if (elPro) elPro.innerText = prosHariIni;
+            let elBya = document.getElementById('stat-biaya'); if (elBya) elBya.innerText = "Rp " + byaHariIni.toLocaleString('id-ID');
+
+            let progress = totalHariIni > 0 ? Math.round((selHariIni / totalHariIni) * 100) : 0;
+
+            let pBar = document.getElementById('stat-progress-bar'); if (pBar) pBar.style.width = progress + '%';
+            let pText = document.getElementById('stat-progress-text'); if (pText) pText.innerText = progress + '%';
+            let pDesc = document.getElementById('stat-progress-desc');
+            if (pDesc) {
+                if (totalHariIni === 0) {
+                    pDesc.innerText = "Belum ada tugas aktif";
+                } else {
+                    pDesc.innerText = selHariIni + " dari " + totalHariIni + " tugas selesai";
+                }
+            }
+            let pLok = document.getElementById('stat-lokasi-terakhir'); if (pLok) pLok.innerText = lastLokasi;
+        }
+
+        function getFilteredReportTasks() {
+            const empF = document.getElementById('filterReportKaryawan').value; const datF = document.getElementById('filterReportDate').value;
+            let arr = [];
+            for (let i = 0; i < db.tasks.length; i++) {
+                let t = db.tasks[i]; let matchE = (empF === 'ALL' || t.Karyawan === empF);
+                let matchD = true; if (datF) { let wStr = String(t.WaktuUpdate); matchD = wStr.indexOf(datF) === 0; }
+                if (matchE && matchD) arr.push(t);
+            }
+            return arr;
+        }
+
+        function updateReportStats() {
+            const dateF = document.getElementById('filterReportDate').value;
+            const empF = document.getElementById('filterReportKaryawan').value;
+
+            // Set Print Metadata
+            let elDate = document.getElementById('printDate'); if (elDate) elDate.innerText = dateF;
+            let elPic = document.getElementById('printPic'); if (elPic) elPic.innerText = document.getElementById('inputRekapKaryawan').value || '-';
+
+            const fTasks = getFilteredReportTasks(); let peng = 0; let tbody = document.getElementById('reportTableBody'); if (tbody) tbody.innerHTML = '';
+            for (let i = 0; i < fTasks.length; i++) {
+                let t = fTasks[i];
+                if (t.Status === 'Selesai' && Number(t.Biaya) > 0) {
+                    peng += Number(t.Biaya);
+                    if (tbody) {
+                        let tr = document.createElement('tr'); tr.className = "border-b border-slate-100";
+                        tr.innerHTML = "<td class='p-3 whitespace-nowrap text-xs text-slate-500'>" + (t.Invoice || "-") + "</td><td class='p-3'>" + t.JudulTugas + "</td><td class='p-3'>" + t.Kategori + "</td><td class='p-3 whitespace-nowrap text-right font-mono font-bold'>" + Number(t.Biaya).toLocaleString('id-ID') + "</td><td class='p-3 hide-on-print w-10'><button type='button' onclick='openEditModal(\"" + t.ID + "\")' class='bg-amber-100 w-7 h-7 rounded text-amber-600 cursor-pointer'><i class='bi bi-pencil'></i></button></td>";
+                        tbody.appendChild(tr);
+                    }
+                }
+            }
+            let elPeng = document.getElementById('kas-pengeluaran'); if (elPeng) elPeng.innerText = "Rp " + peng.toLocaleString('id-ID');
+            const modVal = Number(document.getElementById('inputUangCash').value) || 0;
+            let elModal = document.getElementById('kas-modal'); if (elModal) elModal.innerText = "Rp " + modVal.toLocaleString('id-ID');
+            let elSisa = document.getElementById('kas-sisa'); if (elSisa) elSisa.innerText = "Rp " + (modVal - peng).toLocaleString('id-ID');
+        }
+
+        function onReportDateChange() {
+            const dateF = document.getElementById('filterReportDate').value;
+            let cash = 0; let emp = "";
+            for (let i = 0; i < (db.recaps || []).length; i++) {
+                if (db.recaps[i].Tanggal === dateF) {
+                    cash = db.recaps[i].UangCash || 0;
+                    emp = db.recaps[i].Karyawan || "";
+                    break;
+                }
+            }
+            document.getElementById('inputUangCash').value = cash || '';
+            document.getElementById('inputRekapKaryawan').value = emp;
+            updateReportStats();
+        }
+
+        function autoSaveRecap() {
+            const dateF = document.getElementById('filterReportDate').value;
+            const emp = document.getElementById('inputRekapKaryawan').value;
+            const cash = Number(document.getElementById('inputUangCash').value) || 0;
+            if (!dateF) return;
+
+            const recapObj = { Tanggal: dateF, Karyawan: emp, UangCash: cash };
+            let found = false;
+            if (!db.recaps) db.recaps = [];
+            for (let i = 0; i < db.recaps.length; i++) {
+                if (db.recaps[i].Tanggal === dateF) { db.recaps[i] = recapObj; found = true; break; }
+            }
+            if (!found) db.recaps.push(recapObj);
+
+            if (isGasEnv) { runServerTask('saveRecap', recapObj, function () { }, function (e) { console.error(e); }); }
+            else { saveToSim('Rekap Disimpan'); }
+
+            updateReportStats();
+        }
+
+        function printReportPDF() {
+            autoSaveRecap();
+            setTimeout(() => { window.print(); }, 300);
+        }
+
+        function renderTaskList() {
+            const cont = document.getElementById('taskList'); const empty = document.getElementById('emptyState');
+            if (!cont) return; cont.innerHTML = ''; let found = 0;
+            const kw = document.getElementById('searchInput').value.toLowerCase();
+            let arr = db.tasks.slice();
+            arr.sort(function (a, b) {
+                const o = { 'Pending': 1, 'Dalam Perjalanan': 2, 'Selesai': 3, 'Gagal': 4 };
+                const orderDiff = (o[a.Status] || 99) - (o[b.Status] || 99);
+                if (orderDiff !== 0) return orderDiff;
+                if (a.Prioritas === 'Urgent' && b.Prioritas !== 'Urgent') return -1;
+                if (a.Prioritas !== 'Urgent' && b.Prioritas === 'Urgent') return 1;
+                return String(b.WaktuUpdate || '').localeCompare(String(a.WaktuUpdate || ''));
+            });
+
+            for (let i = 0; i < arr.length; i++) {
+                let t = arr[i];
+                let mS = (currentFilter === 'Semua' || t.Status === currentFilter);
+                let text = (t.JudulTugas + " " + t.Tujuan + " " + t.PIC).toLowerCase();
+                if (mS && text.indexOf(kw) !== -1) {
+                    found++;
+                    let prioritasLabel = "";
+                    let cardBorder = (t.Status === 'Dalam Perjalanan' ? 'border-amber-500' : (t.Status === 'Selesai' ? 'border-emerald-500' : (t.Status === 'Gagal' ? 'border-rose-500' : 'border-teal-500')));
+                    if (t.Prioritas === 'Urgent') { cardBorder = 'border-rose-500'; prioritasLabel = "<span class='text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-1 rounded flex items-center gap-1'><i class='bi bi-fire'></i> Urgent</span>"; }
+
+                    let mapLinkTujuan = t.Tujuan.match(/^https?:\/\//) ? t.Tujuan : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(t.Tujuan);
+                    let ruteHtml = "";
+                    if (t.Dari && t.Dari.trim() !== "") {
+                        let mapLinkDari = t.Dari.match(/^https?:\/\//) ? t.Dari : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(t.Dari);
+                        ruteHtml = "<div class='text-xs mt-2 text-slate-500 flex flex-col gap-1.5'><div class='flex items-start gap-1.5'><i class='bi bi-circle mt-0.5 text-[10px]'></i><a href='" + mapLinkDari + "' target='_blank' class='hover:text-teal-600 hover:underline break-words line-clamp-2'>" + t.Dari + "</a></div><div class='flex items-start gap-1.5'><i class='bi bi-geo-alt-fill text-rose-500 mt-0.5'></i><a href='" + mapLinkTujuan + "' target='_blank' class='hover:text-teal-600 hover:underline break-words line-clamp-2'>" + t.Tujuan + "</a></div></div>";
+                    } else {
+                        ruteHtml = "<p class='text-xs mt-2 text-slate-500 flex items-start gap-1.5'><i class='bi bi-geo-alt-fill text-rose-500 mt-0.5'></i><a href='" + mapLinkTujuan + "' target='_blank' class='hover:text-teal-600 hover:underline break-words line-clamp-2'>" + t.Tujuan + "</a></p>";
+                    }
+
+                    let reqTime = "";
+                    let reqDate = "";
+                    if (t.WaktuUpdate) {
+                        let parts = String(t.WaktuUpdate).split(" ");
+                        let datePart = parts[0] || "";
+                        let timePart = parts[1] || "";
+                        if (timePart) reqTime = timePart.substring(0, 5);
+
+                        if (datePart.indexOf("-") !== -1) {
+                            let dp = datePart.split("-");
+                            let d = parseInt(dp[2], 10);
+                            let m = parseInt(dp[1], 10) - 1;
+                            const monthsShort = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+                            if (!isNaN(d) && m >= 0 && m < 12) {
+                                reqDate = d + " " + monthsShort[m];
+                            }
+                        }
+                    }
+                    let timeDisplay = reqDate ? (reqDate + (reqTime ? " " + reqTime : "")) : (reqTime || "-");
+
+                    let actionBtnHtml = "";
+                    if (t.Status === 'Pending') {
+                        actionBtnHtml = "<div class='mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex gap-2'>" +
+                            "<button type='button' onclick='processTaskDirectly(\"" + t.ID + "\")' class='flex-1 rounded-xl py-2.5 font-bold cursor-pointer transition-all flex items-center justify-center gap-1.5 bg-gradient-to-r from-teal-600 to-emerald-500 hover:from-teal-700 hover:to-emerald-600 text-white shadow-sm text-sm'>" +
+                            "<i class='bi bi-play-circle-fill text-base'></i> Diproses</button>" +
+                            "<button type='button' onclick='openStatusModal(\"" + t.ID + "\")' title='Ubah Status' class='px-3.5 rounded-xl py-2.5 font-bold cursor-pointer transition-colors flex items-center justify-center bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-sm'>" +
+                            "<i class='bi bi-pencil-square'></i></button>" +
+                            "</div>";
+                    } else if (t.Status === 'Dalam Perjalanan') {
+                        actionBtnHtml = "<div class='mt-4 pt-4 border-t border-slate-100 dark:border-slate-800'>" +
+                            "<button type='button' onclick='openStatusModal(\"" + t.ID + "\")' class='w-full rounded-xl py-2.5 font-bold cursor-pointer transition-colors flex items-center justify-center gap-2 bg-slate-800 text-white hover:bg-slate-700 dark:bg-teal-600 dark:hover:bg-teal-500 text-sm'>" +
+                            "<i class='bi bi-pencil-square'></i> Update Status</button>" +
+                            "</div>";
+                    } else {
+                        actionBtnHtml = "<div class='mt-4 pt-4 border-t border-slate-100 dark:border-slate-800'>" +
+                            "<button type='button' onclick='openStatusModal(\"" + t.ID + "\")' class='w-full rounded-xl py-2.5 font-bold cursor-pointer transition-colors flex items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700 text-sm'>" +
+                            "<i class='bi bi-pencil-square'></i> Edit Status</button>" +
+                            "</div>";
+                    }
+
+                    let div = document.createElement('div'); div.className = "bg-white dark:bg-darkcard p-5 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 mb-3 border-l-4 " + cardBorder;
+                    div.innerHTML = "<div class='flex justify-between items-start mb-2'>" +
+                        "<div class='flex flex-col gap-1'>" +
+                        "<div class='flex items-center gap-1 text-[10px] text-slate-500 font-bold'><i class='bi bi-person-circle'></i> " + (t.Karyawan || "-") + " <span class='text-slate-300 mx-0.5'>&bull;</span> <i class='bi bi-clock text-slate-400'></i> " + timeDisplay + "</div>" +
+                        "<div class='flex flex-wrap gap-1 mt-0.5'><span class='text-[10px] font-bold text-teal-600 bg-teal-50 px-2 py-1 rounded border border-teal-100'>" + t.Kategori + "</span>" + prioritasLabel + "</div>" +
+                        "</div>" +
+                        "<span class='text-[10px] font-bold px-2 py-1 rounded shadow-sm " + (t.Status === 'Dalam Perjalanan' ? 'bg-amber-100 text-amber-700' : (t.Status === 'Selesai' ? 'bg-emerald-100 text-emerald-700' : (t.Status === 'Gagal' ? 'bg-rose-100 text-rose-700' : 'bg-teal-50 text-teal-700 border border-teal-200'))) + "'>" + t.Status + "</span>" +
+                        "</div>" +
+                        "<h3 class='font-black text-slate-800 dark:text-slate-100 text-[15px] mb-2 tracking-tight'>" + t.JudulTugas + "</h3>" + ruteHtml +
+                        actionBtnHtml;
+                    cont.appendChild(div);
+                }
+            }
+            if (empty) empty.style.display = (found === 0) ? 'flex' : 'none';
+        }
+
+        function processTaskDirectly(id) {
+            let idx = -1; for (let i = 0; i < db.tasks.length; i++) if (db.tasks[i].ID === id) idx = i;
+            if (idx > -1) {
+                startLoading("MEMPROSES TUGAS...");
+                let task = Object.assign({}, db.tasks[idx]);
+                task.Status = 'Dalam Perjalanan';
+                task.WaktuUpdate = getJakartaTime();
+                if (isGasEnv) {
+                    runServerTask('saveTask', task, function () {
+                        db.tasks[idx] = task;
+                        renderUI();
+                        endLoading();
+                        showToast('Tugas dipindahkan ke Diproses!');
+                    }, function (err) {
+                        endLoading();
+                        safeAlert('Error', err.message);
+                    });
+                } else {
+                    db.tasks[idx] = task;
+                    saveToSim('Tugas dipindahkan ke Diproses!');
+                }
+            }
+        }
+
+        function handleSaveTask(e) {
+            e.preventDefault();
+            const id = "TSK-" + getJakartaTime().replace(/[- :]/g, '') + "-" + Math.floor(Math.random() * 99);
+            const task = { ID: id, Karyawan: document.getElementById('inputTaskKaryawan').value, JudulTugas: document.getElementById('inputJudul').value, Invoice: document.getElementById('inputInvoice').value, Kategori: document.getElementById('inputKategori').value, Dari: document.getElementById('inputDari').value, Tujuan: document.getElementById('inputTujuan').value, Prioritas: document.getElementById('inputPrioritas').value, PIC: document.getElementById('inputPIC').value, NoHP: document.getElementById('inputHP').value, Biaya: 0, KeteranganBiaya: '', Status: 'Pending', WaktuUpdate: getJakartaTime(), Penerima: '', Catatan: '' };
+            startLoading();
+            if (isGasEnv) {
+                runServerTask('saveTask', task, function () {
+                    db.tasks.push(task);
+                    document.getElementById('formAddTask').reset();
+                    setFilter('Pending');
+                    switchTab('home');
+                    endLoading();
+                    showToast('Tersimpan di Pending');
+                }, function (err) {
+                    endLoading();
+                    safeAlert('Error', err.message);
+                });
+            } else {
+                db.tasks.push(task);
+                document.getElementById('formAddTask').reset();
+                setFilter('Pending');
+                switchTab('home');
+                saveToSim('Tugas Baru di Pending!');
+            }
+        }
+
+        function openStatusModal(id) {
+            let t = null; for (let i = 0; i < db.tasks.length; i++) if (db.tasks[i].ID === id) t = db.tasks[i]; if (!t) return;
+            document.getElementById('modalTaskId').value = t.ID; document.getElementById('modalTaskJudul').innerText = t.JudulTugas;
+            let mapLink = t.Tujuan.match(/^https?:\/\//) ? t.Tujuan : "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(t.Tujuan);
+            document.getElementById('modalTaskTujuan').innerHTML = "<a href='" + mapLink + "' target='_blank' class='flex items-start gap-1 text-teal-600 hover:underline'><i class='bi bi-geo-alt-fill text-rose-500 mt-0.5'></i> Buka di Maps: " + t.Tujuan + "</a>";
+            document.getElementById('inputModalBiaya').value = t.Biaya > 0 ? t.Biaya : ''; document.getElementById('inputModalKetBiaya').value = t.KeteranganBiaya || ''; document.getElementById('inputModalPenerima').value = t.Penerima || ''; document.getElementById('inputModalCatatan').value = t.Catatan || '';
+            selectStatus(t.Status); const mod = document.getElementById('modalStatus'); mod.classList.remove('safe-hidden'); mod.style.display = 'flex';
+        }
+        function closeModal() { const mod = document.getElementById('modalStatus'); mod.style.display = 'none'; mod.classList.add('safe-hidden'); }
+
+        function selectStatus(s) {
+            selectedStatusForModal = s; const btns = document.querySelectorAll('.status-select-btn');
+            for (let i = 0; i < btns.length; i++) { btns[i].classList.remove('ring-2', 'ring-teal-500'); }
+            const active = document.getElementById('btnStatus-' + s); if (active) active.classList.add('ring-2', 'ring-teal-500');
+            const pod = document.getElementById('podForm'); if (pod) pod.style.display = (s === 'Selesai' || s === 'Gagal') ? 'block' : 'none';
+        }
+
+        function saveStatusUpdate() {
+            const id = document.getElementById('modalTaskId').value; const s = selectedStatusForModal; const b = Number(document.getElementById('inputModalBiaya').value) || 0; const kb = document.getElementById('inputModalKetBiaya').value; const p = document.getElementById('inputModalPenerima').value; const c = document.getElementById('inputModalCatatan').value;
+            if ((s === 'Selesai' || s === 'Gagal') && c === '') { safeAlert('Peringatan', 'Catatan wajib diisi!'); return; }
+            closeModal(); startLoading();
+            let idx = -1; for (let i = 0; i < db.tasks.length; i++) if (db.tasks[i].ID === id) idx = i;
+            if (idx > -1) {
+                let task = Object.assign({}, db.tasks[idx]); task.Status = s; task.Biaya = b; task.KeteranganBiaya = kb; task.Penerima = p; task.Catatan = c; task.WaktuUpdate = getJakartaTime();
+                if (isGasEnv) { runServerTask('saveTask', task, function () { db.tasks[idx] = task; renderUI(); endLoading(); showToast('Diupdate'); }, function () { endLoading(); }); }
+                else { db.tasks[idx] = task; saveToSim('Diupdate'); }
+            }
+        }
+
+        function renderVendorList() {
+            const cont = document.getElementById('vendorList');
+            const empty = document.getElementById('vendorEmptyState');
+            if (!cont) return;
+            cont.innerHTML = '';
+            let kw = "";
+            const searchEl = document.getElementById('searchVendorInput');
+            if (searchEl) kw = searchEl.value.toLowerCase();
+            let count = 0;
+            for (let i = 0; i < db.vendors.length; i++) {
+                let v = db.vendors[i];
+                if ((v.Nama + " " + v.Alamat).toLowerCase().indexOf(kw) !== -1) {
+                    count++;
+                    let div = document.createElement('div');
+                    div.className = "bg-white dark:bg-darkcard p-4 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 flex justify-between items-center";
+                    div.innerHTML = "<div class='flex-1'><h4 class='font-bold text-slate-800 dark:text-slate-200'>" + v.Nama + "</h4><p class='text-xs text-slate-500 mt-1'>" + v.Alamat + "</p><p class='text-xs text-teal-600 font-bold mt-1'>" + (v.NoHP || '-') + "</p></div><div class='flex gap-2'><button type='button' onclick='editVendor(\"" + v.ID + "\")' class='w-8 h-8 rounded-full bg-amber-50 text-amber-500 cursor-pointer'><i class='bi bi-pencil-fill'></i></button><button type='button' onclick='deleteVendorClient(\"" + v.ID + "\")' class='w-8 h-8 rounded-full bg-rose-50 text-rose-500 cursor-pointer'><i class='bi bi-trash-fill'></i></button></div>";
+                    cont.appendChild(div);
+                }
+            }
+            if (empty) empty.style.display = (count === 0) ? 'flex' : 'none';
+        }
+
+        function populateVendorSelect() {
+            const sel = document.getElementById('inputPilihVendor');
+            const selDari = document.getElementById('inputPilihVendorDari');
+            let options = '<option value="">-- Auto-fill Vendor --</option>';
+            for (let i = 0; i < db.vendors.length; i++) {
+                options += '<option value="' + db.vendors[i].ID + '">' + db.vendors[i].Nama + ' - ' + db.vendors[i].Alamat + '</option>';
+            }
+            if (sel) sel.innerHTML = options;
+            if (selDari) selDari.innerHTML = options;
+        }
+
+        function autoFillVendor() {
+            const selId = document.getElementById('inputPilihVendor').value;
+            if (!selId) return;
+            let v = null; for (let i = 0; i < db.vendors.length; i++) { if (db.vendors[i].ID === selId) { v = db.vendors[i]; break; } }
+            if (v) {
+                document.getElementById('inputTujuan').value = v.Nama + " - " + (v.Alamat || "");
+                document.getElementById('inputPIC').value = v.Nama || "";
+                document.getElementById('inputHP').value = v.NoHP || "";
+            }
+        }
+
+        function autoFillVendorDari() {
+            const selId = document.getElementById('inputPilihVendorDari').value;
+            if (!selId) return;
+            let v = null; for (let i = 0; i < db.vendors.length; i++) { if (db.vendors[i].ID === selId) { v = db.vendors[i]; break; } }
+            if (v) {
+                document.getElementById('inputDari').value = v.Nama + " - " + (v.Alamat || "");
+            }
+        }
+
+        function openVendorModal() {
+            document.getElementById('formVendor').reset();
+            document.getElementById('inputVendorId').value = "";
+            document.getElementById('modalVendorTitle').innerText = "Tambah Vendor";
+            document.getElementById('modalVendor').classList.remove('safe-hidden');
+            document.getElementById('modalVendor').style.display = 'flex';
+        }
+
+        function editVendor(id) {
+            let v = null;
+            for (let i = 0; i < db.vendors.length; i++) if (db.vendors[i].ID === id) { v = db.vendors[i]; break; }
+            if (!v) return;
+            document.getElementById('inputVendorId').value = v.ID;
+            document.getElementById('inputVendorNama').value = v.Nama;
+            document.getElementById('inputVendorHP').value = v.NoHP;
+            document.getElementById('inputVendorAlamat').value = v.Alamat;
+            document.getElementById('modalVendorTitle').innerText = "Edit Vendor";
+            document.getElementById('modalVendor').classList.remove('safe-hidden');
+            document.getElementById('modalVendor').style.display = 'flex';
+        }
+
+        function closeVendorModal() { document.getElementById('modalVendor').style.display = 'none'; document.getElementById('modalVendor').classList.add('safe-hidden'); }
+
+        function saveVendor(e) {
+            e.preventDefault();
+            let id = document.getElementById('inputVendorId').value;
+            if (!id) id = "VND-" + getJakartaTime().replace(/[- :]/g, '') + "-" + Math.floor(Math.random() * 99);
+            const vendor = {
+                ID: id,
+                Nama: document.getElementById('inputVendorNama').value,
+                NoHP: document.getElementById('inputVendorHP').value,
+                Alamat: document.getElementById('inputVendorAlamat').value
+            };
+            startLoading();
+            if (isGasEnv) {
+                runServerTask('saveVendor', vendor, function () {
+                    let exists = false;
+                    for (let i = 0; i < db.vendors.length; i++) { if (db.vendors[i].ID === vendor.ID) { db.vendors[i] = vendor; exists = true; break; } }
+                    if (!exists) db.vendors.push(vendor);
+                    closeVendorModal(); renderUI(); endLoading(); showToast('Vendor Disimpan');
+                }, function (err) { endLoading(); safeAlert('Error', err.message); });
+            } else {
+                let exists = false;
+                for (let i = 0; i < db.vendors.length; i++) { if (db.vendors[i].ID === vendor.ID) { db.vendors[i] = vendor; exists = true; break; } }
+                if (!exists) db.vendors.push(vendor);
+                closeVendorModal(); saveToSim('Vendor Disimpan');
+            }
+        }
+
+        function deleteVendorClient(id) {
+            if (!confirm("Hapus vendor ini?")) return;
+            startLoading();
+            if (isGasEnv) {
+                runServerTask('deleteVendor', id, function () {
+                    db.vendors = db.vendors.filter(function (v) { return v.ID !== id; });
+                    renderUI(); endLoading(); showToast('Dihapus');
+                }, function (err) { endLoading(); safeAlert('Error', err.message); });
+            } else {
+                db.vendors = db.vendors.filter(function (v) { return v.ID !== id; });
+                saveToSim('Dihapus');
+            }
+        }
+
+        function renderUsers() {
+            const tbody = document.getElementById('userList');
+            const select1 = document.getElementById('inputTaskKaryawan');
+            const select2 = document.getElementById('filterReportKaryawan');
+            const select3 = document.getElementById('editTaskKaryawan');
+            const select4 = document.getElementById('inputRekapKaryawan');
+            if (tbody) tbody.innerHTML = '';
+            let opts = '<option value="">-- Pilih --</option>';
+            let repOpts = '<option value="ALL">Semua</option>';
+            for (let i = 0; i < db.users.length; i++) {
+                let u = db.users[i];
+                if (tbody) {
+                    let tr = document.createElement('tr'); tr.className = "border-b border-slate-100 dark:border-slate-800";
+                    tr.innerHTML = "<td class='p-3 text-slate-800 dark:text-slate-200'><b>" + u.Nama + "</b><br><span class='text-xs text-slate-500'>" + u.ID + " - " + u.Posisi + "</span></td><td class='p-3 text-right'><button type='button' onclick='deleteUser(\"" + u.ID + "\")' class='text-rose-500 cursor-pointer'><i class='bi bi-trash-fill'></i></button></td>";
+                    tbody.appendChild(tr);
+                }
+                opts += '<option value="' + u.Nama + ' (' + u.Posisi + ')">' + u.Nama + ' (' + u.Posisi + ')</option>';
+                repOpts += '<option value="' + u.Nama + ' (' + u.Posisi + ')">' + u.Nama + ' (' + u.Posisi + ')</option>';
+            }
+            if (select1) select1.innerHTML = opts;
+            if (select3) select3.innerHTML = opts;
+            if (select4) { let oldVal = select4.value; select4.innerHTML = opts; select4.value = oldVal || ""; }
+            if (select2) { let oldVal = select2.value; select2.innerHTML = repOpts; select2.value = oldVal || "ALL"; }
+        }
+
+        function addUser() {
+            let id = document.getElementById('inputUserId').value;
+            let nama = document.getElementById('inputUserName').value;
+            let posisi = document.getElementById('inputUserRole').value;
+            if (!id || !nama) return safeAlert('Error', 'ID dan Nama wajib diisi');
+            let user = { ID: id, Nama: nama, Posisi: posisi };
+            startLoading();
+            if (isGasEnv) {
+                runServerTask('saveUser', user, function () {
+                    db.users.push(user); document.getElementById('inputUserId').value = ''; document.getElementById('inputUserName').value = ''; renderUI(); endLoading(); showToast('Tersimpan');
+                }, function (err) { endLoading(); safeAlert('Error', err.message); });
+            } else {
+                db.users.push(user); document.getElementById('inputUserId').value = ''; document.getElementById('inputUserName').value = ''; saveToSim('Tersimpan');
+            }
+        }
+
+        function deleteUser(id) {
+            if (!confirm("Hapus karyawan?")) return;
+            startLoading();
+            if (isGasEnv) {
+                runServerTask('deleteUser', id, function () {
+                    db.users = db.users.filter(function (u) { return u.ID !== id; }); renderUI(); endLoading(); showToast('Dihapus');
+                }, function (err) { endLoading(); safeAlert('Error', err.message); });
+            } else {
+                db.users = db.users.filter(function (u) { return u.ID !== id; }); saveToSim('Dihapus');
+            }
+        }
+
+        function renderCategories() {
+            const div = document.getElementById('categoryList');
+            const sel1 = document.getElementById('inputKategori');
+            const sel2 = document.getElementById('editTaskKategori');
+            if (div) div.innerHTML = '';
+            let opts = '';
+            for (let i = 0; i < db.categories.length; i++) {
+                let cat = db.categories[i];
+                if (div) {
+                    let d = document.createElement('div'); d.className = "flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl";
+                    d.innerHTML = "<span class='font-bold text-slate-700 dark:text-slate-300 text-sm'>" + cat + "</span><button type='button' onclick='deleteCategory(\"" + cat + "\")' class='text-rose-500 cursor-pointer'><i class='bi bi-trash-fill'></i></button>";
+                    div.appendChild(d);
+                }
+                opts += '<option value="' + cat + '">' + cat + '</option>';
+            }
+            if (sel1) sel1.innerHTML = opts;
+            if (sel2) sel2.innerHTML = opts;
+        }
+
+        function addCategory() {
+            let cat = document.getElementById('inputNewCategory').value;
+            if (!cat) return;
+            startLoading();
+            if (isGasEnv) {
+                runServerTask('saveCategory', cat, function () {
+                    db.categories.push(cat); document.getElementById('inputNewCategory').value = ''; renderUI(); endLoading(); showToast('Tersimpan');
+                }, function (err) { endLoading(); safeAlert('Error', err.message); });
+            } else {
+                db.categories.push(cat); document.getElementById('inputNewCategory').value = ''; saveToSim('Tersimpan');
+            }
+        }
+
+        function deleteCategory(cat) {
+            if (!confirm("Hapus kategori?")) return;
+            startLoading();
+            if (isGasEnv) {
+                runServerTask('deleteCategory', cat, function () {
+                    db.categories = db.categories.filter(function (c) { return c !== cat; }); renderUI(); endLoading(); showToast('Dihapus');
+                }, function (err) { endLoading(); safeAlert('Error', err.message); });
+            } else {
+                db.categories = db.categories.filter(function (c) { return c !== cat; }); saveToSim('Dihapus');
+            }
+        }
+
+        function exportData() { safeAlert('Info', 'Fitur export sedang dikembangkan.'); }
+        function clearAllData() { if (confirm("Hapus local storage hari ini?")) { localStorage.removeItem('ops_dummy_db'); location.reload(); } }
+        function resetReportFilter() { document.getElementById('filterReportKaryawan').value = 'ALL'; document.getElementById('filterReportDate').value = getJakartaTime().split(' ')[0]; updateReportStats(); }
+
+        function openEditModal(id) {
+            let t = null; for (let i = 0; i < db.tasks.length; i++) if (db.tasks[i].ID === id) { t = db.tasks[i]; break; }
+            if (!t) return;
+            document.getElementById('editTaskId').value = t.ID;
+            document.getElementById('editTaskJudul').value = t.JudulTugas;
+            document.getElementById('editTaskInvoice').value = t.Invoice;
+            document.getElementById('editTaskDari').value = t.Dari || '';
+            document.getElementById('editTaskPrioritas').value = t.Prioritas || 'Standar';
+            document.getElementById('editTaskKaryawan').value = t.Karyawan;
+            document.getElementById('editTaskKategori').value = t.Kategori;
+            document.getElementById('editTaskBiaya').value = t.Biaya || '';
+            document.getElementById('modalEditTask').classList.remove('safe-hidden'); document.getElementById('modalEditTask').style.display = 'flex';
+        }
+        function closeEditModal() { document.getElementById('modalEditTask').style.display = 'none'; document.getElementById('modalEditTask').classList.add('safe-hidden'); }
+        function saveEditTask() {
+            const id = document.getElementById('editTaskId').value;
+            let idx = -1; for (let i = 0; i < db.tasks.length; i++) if (db.tasks[i].ID === id) idx = i;
+            if (idx > -1) {
+                let task = Object.assign({}, db.tasks[idx]);
+                task.JudulTugas = document.getElementById('editTaskJudul').value;
+                task.Invoice = document.getElementById('editTaskInvoice').value;
+                task.Dari = document.getElementById('editTaskDari').value;
+                task.Prioritas = document.getElementById('editTaskPrioritas').value;
+                task.Karyawan = document.getElementById('editTaskKaryawan').value;
+                task.Kategori = document.getElementById('editTaskKategori').value;
+                task.Biaya = Number(document.getElementById('editTaskBiaya').value) || 0;
+                startLoading();
+                if (isGasEnv) {
+                    runServerTask('saveTask', task, function () { db.tasks[idx] = task; closeEditModal(); renderUI(); endLoading(); showToast('Diupdate'); }, function (err) { endLoading(); safeAlert('Error', err.message); });
+                } else {
+                    db.tasks[idx] = task; closeEditModal(); saveToSim('Diupdate');
+                }
+            }
+        }
+        function deleteTaskClient() {
+            const id = document.getElementById('editTaskId').value;
+            if (!confirm("Hapus tugas ini permanen?")) return;
+            startLoading();
+            if (isGasEnv) {
+                runServerTask('deleteTask', id, function () {
+                    db.tasks = db.tasks.filter(function (t) { return t.ID !== id; });
+                    closeEditModal(); renderUI(); endLoading(); showToast('Dihapus');
+                }, function (err) { endLoading(); safeAlert('Error', err.message); });
+            } else {
+                db.tasks = db.tasks.filter(function (t) { return t.ID !== id; });
+                closeEditModal(); saveToSim('Dihapus');
+            }
+        }
+
+        // JALANKAN SAAT DOM BENAR-BENAR SIAP
+        document.addEventListener('DOMContentLoaded', function () {
+            try { initApp(); } catch (e) { alert("Sistem Gagal Memuat: " + e.message); }
+        });
+
+    </script>
+</body>
+
+</html>
