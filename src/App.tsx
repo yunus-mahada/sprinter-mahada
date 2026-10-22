@@ -128,8 +128,8 @@ export function SprinterApp() {
   const [authMsg, setAuthMsg] = useState<{ text: string; error: boolean } | null>(null);
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
-  // Navigation tab: 'home' | 'vendor' | 'add' | 'report' | 'setting'
-  const [activeTab, setActiveTab] = useState<'home' | 'vendor' | 'add' | 'report' | 'setting'>('home');
+  // Navigation tab: 'home' | 'radar' | 'add' | 'report' | 'vendor' | 'setting'
+  const [activeTab, setActiveTab] = useState<'home' | 'radar' | 'add' | 'report' | 'vendor' | 'setting'>('home');
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     return localStorage.getItem('theme') === 'dark';
   });
@@ -1024,6 +1024,19 @@ export function SprinterApp() {
               >
                 <i className={`bi ${darkMode ? 'bi-sun-fill text-amber-300' : 'bi-moon-stars-fill'} text-sm`}></i>
               </button>
+              {/* Tombol Pengaturan (dipindah dari bottom nav ke header) */}
+              <button
+                type="button"
+                onClick={() => setActiveTab('setting')}
+                title="Pengaturan"
+                className={`w-9 h-9 flex items-center justify-center rounded-xl transition border cursor-pointer active:scale-95 ${
+                  activeTab === 'setting'
+                    ? 'bg-teal-600 text-white border-teal-500 shadow-md shadow-teal-500/30'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300 hover:text-white'
+                }`}
+              >
+                <i className="bi bi-gear-fill text-sm"></i>
+              </button>
             </div>
           </div>
         </header>
@@ -1105,115 +1118,7 @@ export function SprinterApp() {
               </div>
             </div>
 
-            {/* RADAR PETA LIVE SPRINTER */}
-            {(() => {
-              const activeSprinters = (data.sprinterLocations || []).filter(
-                (l) => l.isActive && l.latitude && l.longitude
-              );
-              return (
-                <div className="px-4 mb-2">
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-2xs overflow-hidden">
-                    {/* Header bar */}
-                    <div className="p-3.5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-sm">
-                          <i className="bi bi-broadcast-pin"></i>
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-xs md:text-sm text-slate-800 dark:text-slate-100 leading-none">
-                              Radar Posisi Live Sprinter
-                            </h3>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                              {activeSprinters.length} Online
-                            </span>
-                          </div>
-                          <p className="text-[10px] text-slate-400 mt-0.5">
-                            Pantauan posisi GPS dari handphone sprinter di lapangan
-                          </p>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setShowLiveRadarMap(!showLiveRadarMap)}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 transition cursor-pointer flex items-center gap-1"
-                        >
-                          <i className={`bi ${showLiveRadarMap ? 'bi-chevron-up' : 'bi-chevron-down'}`}></i>
-                          <span>{showLiveRadarMap ? 'Tutup Peta' : 'Buka Peta'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Interactive Leaflet Map */}
-                    {showLiveRadarMap && (
-                      <div className="p-3">
-                        <SprinterLiveMap
-                          locations={data.sprinterLocations || []}
-                          tasks={data.tasks}
-                          selectedSprinterId={selectedSprinterOnMap}
-                          onSelectSprinter={(name) => setSelectedSprinterOnMap(name)}
-                          className="h-64 w-full"
-                        />
-
-                        {/* Sprinter Chips & Fast Action */}
-                        <div className="mt-2.5 flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
-                          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
-                            Sprinter:
-                          </span>
-                          {activeSprinters.length === 0 ? (
-                            <span className="text-xs text-slate-400 italic">
-                              Belum ada GPS aktif. Aktifkan di menu Pengaturan.
-                            </span>
-                          ) : (
-                            activeSprinters.map((s) => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                onClick={() =>
-                                  setSelectedSprinterOnMap(
-                                    selectedSprinterOnMap === s.karyawanNama ? undefined : s.karyawanNama
-                                  )
-                                }
-                                className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
-                                  selectedSprinterOnMap === s.karyawanNama
-                                    ? 'bg-teal-600 text-white border-teal-600'
-                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
-                                }`}
-                              >
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                <span>{s.karyawanNama}</span>
-                                <span className="text-[10px] opacity-70">
-                                  {formatTimeAgo(s.waktuUpdate)}
-                                </span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-
-                        {/* Quick Broadcast Notice for Sprinters */}
-                        {!isGpsBroadcasting && (
-                          <div className="mt-2.5 p-2.5 rounded-xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200/60 dark:border-teal-800/50 flex items-center justify-between gap-2 text-xs">
-                            <div className="text-slate-600 dark:text-slate-300 text-[11px]">
-                              Apakah Anda sprinter yang sedang bertugas?
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setActiveTab('setting')}
-                              className="px-2.5 py-1 rounded-lg bg-teal-600 text-white font-bold text-[11px] hover:bg-teal-700 transition cursor-pointer shrink-0"
-                            >
-                              Aktifkan GPS HP Saya &rarr;
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
 
             {/* SEARCH & SEGMENTED FILTER BAR */}
             <div className="px-4 py-3 sticky top-[69px] z-20 bg-slate-50/95 dark:bg-[#0f172a]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80">
@@ -1603,7 +1508,197 @@ export function SprinterApp() {
           </div>
         )}
 
-        {/* VIEW 2: DATABASE VENDOR */}
+        {/* VIEW 2: RADAR POSISI LIVE SPRINTER (Halaman Khusus) */}
+        {activeTab === 'radar' && (
+          <div className="animate-fade-in">
+            {(() => {
+              const activeSprinters = (data.sprinterLocations || []).filter(
+                (l) => l.isActive && l.latitude && l.longitude
+              );
+              return (
+                <>
+                  {/* Header */}
+                  <div className="px-4 md:px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800/80 sticky top-[69px] z-20 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-lg shadow-inner">
+                          <i className="bi bi-broadcast-pin"></i>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-base md:text-lg font-bold text-slate-900 dark:text-white leading-none">
+                              Radar Sprinter
+                            </h2>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                              {activeSprinters.length} Online
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">Pantauan posisi GPS live dari handphone sprinter</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => refreshData(true)}
+                        className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer active:scale-95"
+                        title="Refresh lokasi GPS"
+                      >
+                        <i className="bi bi-arrow-clockwise text-sm"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Sprinter Chips Horizontal */}
+                  <div className="px-4 py-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200/60 dark:border-slate-800/60">
+                    <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
+                        Sprinter:
+                      </span>
+                      {activeSprinters.length === 0 ? (
+                        <span className="text-xs text-slate-400 italic">
+                          Belum ada GPS aktif. Aktifkan di Pengaturan <i className="bi bi-gear"></i>
+                        </span>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSprinterOnMap(undefined)}
+                            className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold border transition cursor-pointer ${
+                              !selectedSprinterOnMap
+                                ? 'bg-teal-600 text-white border-teal-600'
+                                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
+                            }`}
+                          >
+                            Semua
+                          </button>
+                          {activeSprinters.map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() =>
+                                setSelectedSprinterOnMap(
+                                  selectedSprinterOnMap === s.karyawanNama ? undefined : s.karyawanNama
+                                )
+                              }
+                              className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
+                                selectedSprinterOnMap === s.karyawanNama
+                                  ? 'bg-teal-600 text-white border-teal-600'
+                                  : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
+                              }`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                              <span>{s.karyawanNama}</span>
+                              <span className="text-[10px] opacity-70">
+                                {formatTimeAgo(s.waktuUpdate)}
+                              </span>
+                            </button>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Full-size Map */}
+                  <div className="p-4">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-sm overflow-hidden">
+                      <SprinterLiveMap
+                        locations={data.sprinterLocations || []}
+                        tasks={data.tasks}
+                        selectedSprinterId={selectedSprinterOnMap}
+                        onSelectSprinter={(name) => setSelectedSprinterOnMap(name)}
+                        className="h-[60vh] w-full"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Active Sprinter Details Cards */}
+                  {activeSprinters.length > 0 && (
+                    <div className="px-4 pb-4 space-y-2.5">
+                      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                        Detail Lokasi Sprinter Aktif
+                      </h3>
+                      {activeSprinters.map((s) => (
+                        <div
+                          key={s.id}
+                          onClick={() => setSelectedSprinterOnMap(s.karyawanNama)}
+                          className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                            selectedSprinterOnMap === s.karyawanNama
+                              ? 'bg-teal-50 dark:bg-teal-950/30 border-teal-300 dark:border-teal-700 shadow-sm'
+                              : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/80 hover:border-teal-400'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
+                                <i className="bi bi-person-walking"></i>
+                              </div>
+                              <div>
+                                <div className="font-bold text-sm text-slate-800 dark:text-white">{s.karyawanNama}</div>
+                                <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                  <i className="bi bi-clock text-[10px]"></i>
+                                  <span>Update {formatTimeAgo(s.waktuUpdate)}</span>
+                                  {s.accuracy && (
+                                    <>
+                                      <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                                      <span>±{Math.round(s.accuracy)}m</span>
+                                    </>
+                                  )}
+                                  {s.speed != null && s.speed > 0 && (
+                                    <>
+                                      <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                                      <span>{Math.round(s.speed * 3.6)} km/h</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                              <a
+                                href={`https://www.google.com/maps?q=${s.latitude},${s.longitude}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="px-2.5 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-bold hover:bg-teal-700 transition flex items-center gap-1"
+                              >
+                                <i className="bi bi-geo-alt-fill"></i> Maps
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Quick Broadcast Notice */}
+                  {!isGpsBroadcasting && (
+                    <div className="px-4 pb-4">
+                      <div className="p-4 rounded-2xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200/60 dark:border-teal-800/50 flex items-center justify-between gap-3">
+                        <div>
+                          <div className="font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5 mb-1">
+                            <i className="bi bi-broadcast text-teal-600"></i> Anda sprinter?
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Aktifkan GPS HP untuk muncul di radar ini
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('setting')}
+                          className="px-3.5 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs hover:bg-teal-700 transition cursor-pointer shrink-0 flex items-center gap-1.5 active:scale-95"
+                        >
+                          <i className="bi bi-gear"></i> Pengaturan GPS
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* VIEW 3: DATABASE VENDOR */}
         {activeTab === 'vendor' && (
           <div className="animate-fade-in">
             <div className="px-4 md:px-5 py-4 bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800/80 sticky top-[69px] z-20 flex justify-between items-center shadow-2xs">
@@ -2767,13 +2862,13 @@ export function SprinterApp() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('vendor')}
+          onClick={() => setActiveTab('radar')}
           className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeTab === 'vendor' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            activeTab === 'radar' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
         >
-          <i className="bi bi-shop-window text-lg"></i>
-          <span className="text-[10px] tracking-wide">Vendor</span>
+          <i className="bi bi-broadcast-pin text-lg"></i>
+          <span className="text-[10px] tracking-wide">Radar</span>
         </button>
 
         {/* PLUS BUTTON IN CENTER */}
@@ -2805,13 +2900,13 @@ export function SprinterApp() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('setting')}
+          onClick={() => setActiveTab('vendor')}
           className={`flex-1 py-1.5 flex flex-col items-center gap-1 transition-all cursor-pointer ${
-            activeTab === 'setting' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            activeTab === 'vendor' ? 'text-teal-600 dark:text-teal-400 font-bold' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
           }`}
         >
-          <i className="bi bi-gear-fill text-lg"></i>
-          <span className="text-[10px] tracking-wide">Seting</span>
+          <i className="bi bi-shop-window text-lg"></i>
+          <span className="text-[10px] tracking-wide">Vendor</span>
         </button>
       </nav>
 
