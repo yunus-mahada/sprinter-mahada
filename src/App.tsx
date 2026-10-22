@@ -165,9 +165,17 @@ export function SprinterApp() {
   const [showLiveRadarMap, setShowLiveRadarMap] = useState<boolean>(true);
   const [selectedSprinterOnMap, setSelectedSprinterOnMap] = useState<string | undefined>(undefined);
 
-  // Filter in Home
+  // Filter in Home (cuma Pending, Diproses/Dalam Perjalanan, Selesai, Batal/Gagal)
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'Pending' | 'Dalam Perjalanan' | 'Selesai' | 'Gagal' | 'Semua'>('Pending');
+  const [statusFilter, setStatusFilter] = useState<'Pending' | 'Dalam Perjalanan' | 'Selesai' | 'Gagal'>('Pending');
+
+  // PWA Install state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(false);
+  const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
+
+  // Sub-tabs in Settings ('karyawan' | 'gps' | 'kategori' | 'informasi')
+  const [settingTab, setSettingTab] = useState<'karyawan' | 'gps' | 'kategori' | 'informasi'>('karyawan');
 
   // Filter in Report
   const [reportDate, setReportDate] = useState<string>(getTodayDateString());
@@ -236,6 +244,58 @@ export function SprinterApp() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
   };
+
+  // PWA Install Event Listener & Check
+  useEffect(() => {
+    const checkStandalone = () => {
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        (window.navigator as any).standalone === true;
+      setIsAppInstalled(isStandalone);
+    };
+    checkStandalone();
+
+    const handleBeforeInstall = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredPrompt(null);
+      showToast('Aplikasi berhasil dipasang di handphone Anda!');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (isAppInstalled) {
+      showToast('Aplikasi sudah terpasang di HP ini!');
+      return;
+    }
+    if (deferredPrompt) {
+      try {
+        await deferredPrompt.prompt();
+        const choice = await deferredPrompt.userChoice;
+        if (choice && choice.outcome === 'accepted') {
+          showToast('Menginstal aplikasi ke layar utama HP...');
+        }
+        setDeferredPrompt(null);
+      } catch {
+        setShowInstallModal(true);
+      }
+    } else {
+      setShowInstallModal(true);
+    }
+  };
+
 
   // Initial & periodic data fetch
   const refreshData = async (silent = false) => {
@@ -488,7 +548,7 @@ export function SprinterApp() {
     });
 
     return list.filter((t) => {
-      const matchStatus = statusFilter === 'Semua' || t.Status === statusFilter;
+      const matchStatus = t.Status === statusFilter;
       const matchKw =
         !kw ||
         (t.JudulTugas + ' ' + t.Tujuan + ' ' + t.PIC + ' ' + t.Karyawan + ' ' + t.Invoice)
@@ -498,10 +558,9 @@ export function SprinterApp() {
     });
   }, [data.tasks, searchQuery, statusFilter]);
 
-  // Counts for segmented status tabs
+  // Counts for segmented status tabs (cuma Pending, Diproses/Dalam Perjalanan, Selesai, Batal/Gagal)
   const taskCounts = useMemo(() => {
     const counts: Record<string, number> = {
-      Semua: data.tasks.length,
       Pending: 0,
       'Dalam Perjalanan': 0,
       Selesai: 0,
@@ -932,7 +991,23 @@ export function SprinterApp() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Tombol Install Aplikasi Handphone */}
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                title={isAppInstalled ? 'Aplikasi Terpasang di HP' : 'Install Aplikasi di HP (PWA)'}
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer active:scale-95 shadow-xs ${
+                  isAppInstalled
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-teal-500 hover:bg-teal-400 text-slate-900 border-teal-400 font-extrabold'
+                }`}
+              >
+                <i className={`bi ${isAppInstalled ? 'bi-check-circle-fill' : 'bi-phone-vibrate'} text-sm`}></i>
+                <span className="hidden sm:inline">{isAppInstalled ? 'Terpasang' : 'Install di HP'}</span>
+                <span className="sm:hidden">{isAppInstalled ? '✓' : 'Install'}</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => refreshData(true)}
@@ -1164,9 +1239,9 @@ export function SprinterApp() {
                 )}
               </div>
 
-              {/* Segmented Control */}
+              {/* Segmented Control: Cuma Pending, Diproses, Selesai, Batal */}
               <div className="flex bg-slate-200/70 dark:bg-slate-800/80 p-1 rounded-xl overflow-x-auto scrollbar-hide gap-1">
-                {(['Semua', 'Pending', 'Dalam Perjalanan', 'Selesai', 'Gagal'] as const).map((st) => {
+                {(['Pending', 'Dalam Perjalanan', 'Selesai', 'Gagal'] as const).map((st) => {
                   const label = st === 'Dalam Perjalanan' ? 'Diproses' : st === 'Gagal' ? 'Batal' : st;
                   const isActive = statusFilter === st;
                   const count = taskCounts[st] || 0;
@@ -2122,441 +2197,556 @@ export function SprinterApp() {
 
         {/* VIEW 5: PENGATURAN */}
         {activeTab === 'setting' && (
-          <div className="animate-fade-in p-5">
-            <h2 className="text-2xl font-black mb-6 text-slate-800 dark:text-white flex items-center gap-2">
-              <i className="bi bi-gear-fill text-teal-500"></i> Pengaturan Aplikasi
-            </h2>
+          <div className="animate-fade-in p-4 sm:p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white flex items-center gap-2">
+                <i className="bi bi-gear-fill text-teal-500"></i> Pengaturan
+              </h2>
+              <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+                Pilih tab pengaturan di bawah
+              </span>
+            </div>
 
-            {/* SUPABASE AUTHENTICATION */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                  <i className="bi bi-shield-lock-fill text-teal-500"></i> Autentikasi Supabase
+            {/* TAB-TAB KECIL PENGATURAN DI ATAS */}
+            <div className="flex bg-slate-200/80 dark:bg-slate-800/80 p-1 rounded-2xl gap-1 mb-5 overflow-x-auto scrollbar-hide shadow-xs">
+              <button
+                type="button"
+                onClick={() => setSettingTab('karyawan')}
+                className={`flex-1 min-w-[110px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  settingTab === 'karyawan'
+                    ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <i className="bi bi-people-fill text-sm"></i>
+                <span>Kelola Karyawan</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingTab('gps')}
+                className={`flex-1 min-w-[100px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  settingTab === 'gps'
+                    ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <i className="bi bi-geo-alt-fill text-sm"></i>
+                <span>Pelacak GPS</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingTab('kategori')}
+                className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  settingTab === 'kategori'
+                    ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <i className="bi bi-tags-fill text-sm"></i>
+                <span>Kategori</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingTab('informasi')}
+                className={`flex-1 min-w-[90px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                  settingTab === 'informasi'
+                    ? 'bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-400 shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <i className="bi bi-info-circle-fill text-sm"></i>
+                <span>Informasi</span>
+              </button>
+            </div>
+
+            {/* TAB 1: KELOLA KARYAWAN */}
+            {settingTab === 'karyawan' && (
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 mb-6 animate-fade-in">
+                <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                  <i className="bi bi-people-fill text-teal-500"></i> Kelola Karyawan
                 </h3>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  isSupabaseConfigured
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                    : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                }`}>
-                  {isSupabaseConfigured ? 'Supabase Terhubung' : 'Mode Offline / Dev'}
-                </span>
-              </div>
-
-              {user ? (
-                <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center text-sm shadow-sm">
-                        {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-800 dark:text-white">
-                          {user.email}
-                        </h4>
-                        <p className="text-[10px] text-slate-400 font-mono truncate max-w-[200px]">
-                          UID: {user.id}
-                        </p>
-                      </div>
-                    </div>
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 mb-4">
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <input
+                      type="text"
+                      value={newUserId}
+                      onChange={(e) => setNewUserId(e.target.value)}
+                      className="p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
+                      placeholder="ID (Cth: EMP-04)"
+                    />
+                    <input
+                      type="text"
+                      value={newUserName}
+                      onChange={(e) => setNewUserName(e.target.value)}
+                      className="p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
+                      placeholder="Nama Lengkap"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={newUserRole}
+                      onChange={(e) => setNewUserRole(e.target.value)}
+                      className="flex-1 p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
+                    >
+                      <option value="Sprinter">Sprinter</option>
+                      <option value="Produksi">Produksi</option>
+                      <option value="Admin">Admin</option>
+                    </select>
                     <button
                       type="button"
-                      onClick={signOutUser}
-                      className="px-3.5 py-2 text-xs font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-100 transition"
+                      onClick={handleAddKaryawan}
+                      className="bg-teal-600 hover:bg-teal-700 text-white px-5 rounded-xl font-bold text-sm cursor-pointer transition shadow-xs"
                     >
-                      Keluar
+                      Tambah
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Masuk atau daftar dengan akun Supabase untuk mengelola data operasional kurir secara cloud.
-                  </p>
 
-                  <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1">
-                    <button
-                      type="button"
-                      onClick={() => { setAuthMode('signin'); setAuthMsg(null); }}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
-                        authMode === 'signin' ? 'bg-white dark:bg-slate-900 text-teal-600 shadow-sm' : 'text-slate-500'
+                <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl max-h-72 overflow-y-auto">
+                  <table className="w-full text-left">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+                      {data.users.map((u) => (
+                        <tr key={u.ID}>
+                          <td className="p-3 text-slate-800 dark:text-slate-200">
+                            <b>{u.Nama}</b>
+                            <br />
+                            <span className="text-xs text-slate-500">
+                              {u.ID} &bull; {u.Posisi}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteKaryawan(u.ID)}
+                              className="text-rose-500 hover:text-rose-700 cursor-pointer p-1"
+                              title="Hapus Karyawan"
+                            >
+                              <i className="bi bi-trash-fill"></i>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: PELACAK GPS HANDPHONE SPRINTER */}
+            {settingTab === 'gps' && (
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 mb-6 animate-fade-in">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                    <i className="bi bi-geo-alt-fill text-teal-500"></i> Pelacak GPS Handphone Sprinter
+                  </h3>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 ${
+                      isGpsBroadcasting
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                    }`}
+                  >
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isGpsBroadcasting ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'
                       }`}
+                    ></span>
+                    {isGpsBroadcasting ? 'GPS Aktif (Broadcasting)' : 'GPS Nonaktif'}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+                  Fitur ini membaca GPS langsung dari browser handphone sprinter dan menyinkronkannya ke cloud database. 
+                  Tidak memerlukan akun email pihak ketiga atau alat tracker berbayar.
+                </p>
+
+                {/* Identity & Switch */}
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 mb-4 space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                      Nama Sprinter (Pengguna HP Ini)
+                    </label>
+                    <select
+                      value={mySprinterIdentity}
+                      disabled={isGpsBroadcasting}
+                      onChange={(e) => {
+                        setMySprinterIdentity(e.target.value);
+                        localStorage.setItem('sprinter_my_name', e.target.value);
+                      }}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-800 dark:text-slate-200 disabled:opacity-60"
                     >
-                      Masuk
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setAuthMode('signup'); setAuthMsg(null); }}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
-                        authMode === 'signup' ? 'bg-white dark:bg-slate-900 text-teal-600 shadow-sm' : 'text-slate-500'
-                      }`}
-                    >
-                      Daftar Baru
-                    </button>
+                      <option value="">-- Pilih Nama Sprinter Anda --</option>
+                      {data.users.map((u) => (
+                        <option key={u.ID} value={u.Nama}>
+                          {u.Nama} ({u.Posisi})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  {authMsg && (
-                    <div className={`p-3 rounded-xl text-xs font-medium ${
-                      authMsg.error
-                        ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
-                        : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-                    }`}>
-                      {authMsg.text}
+                  {gpsError && (
+                    <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                      <i className="bi bi-exclamation-triangle-fill text-rose-500 mt-0.5"></i>
+                      <div>{gpsError}</div>
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <input
-                      type="email"
-                      value={authEmail}
-                      onChange={(e) => setAuthEmail(e.target.value)}
-                      placeholder="Email Supabase"
-                      className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200"
-                    />
-                    <input
-                      type="password"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      placeholder="Kata Sandi (min 6 karakter)"
-                      className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200"
-                    />
-                  </div>
+                  {/* GPS Info Badge if active */}
+                  {currentGpsCoords && (
+                    <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-teal-200 dark:border-teal-800/60 text-xs space-y-1">
+                      <div className="flex items-center justify-between text-teal-700 dark:text-teal-300 font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <i className="bi bi-pin-map-fill"></i> Koordinat HP Anda:
+                        </span>
+                        <span className="font-mono">
+                          {currentGpsCoords.latitude.toFixed(5)}, {currentGpsCoords.longitude.toFixed(5)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span>
+                          Akurasi: &plusmn;{currentGpsCoords.accuracy ? Math.round(currentGpsCoords.accuracy) : 0} meter
+                        </span>
+                        <span>Update: {formatTimeAgo(currentGpsCoords.timestamp)}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <button
                     type="button"
-                    disabled={isSubmittingAuth}
-                    onClick={async () => {
-                      if (!authEmail.trim() || !authPassword.trim()) {
-                        setAuthMsg({ text: 'Email dan kata sandi wajib diisi', error: true });
-                        return;
-                      }
-                      setIsSubmittingAuth(true);
-                      setAuthMsg(null);
-                      try {
-                        if (authMode === 'signin') {
-                          const res = await signInWithEmail(authEmail, authPassword);
-                          if (res.error) {
-                            setAuthMsg({ text: res.error.message || 'Gagal masuk', error: true });
-                          } else {
-                            setAuthMsg({ text: 'Berhasil masuk ke Supabase!', error: false });
-                          }
-                        } else {
-                          const res = await signUpWithEmail(authEmail, authPassword);
-                          if (res.error) {
-                            setAuthMsg({ text: res.error.message || 'Gagal mendaftar', error: true });
-                          } else {
-                            setAuthMsg({ text: 'Pendaftaran berhasil! Cek email untuk verifikasi.', error: false });
-                          }
-                        }
-                      } catch (err: any) {
-                        setAuthMsg({ text: err.message || 'Terjadi kesalahan autentikasi', error: true });
-                      } finally {
-                        setIsSubmittingAuth(false);
-                      }
-                    }}
-                    className="w-full py-3 px-4 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm transition cursor-pointer shadow-sm disabled:opacity-50"
-                  >
-                    {isSubmittingAuth
-                      ? 'Memproses...'
-                      : authMode === 'signin'
-                      ? 'Masuk ke Akun'
-                      : 'Daftar Akun Baru'}
-                  </button>
-
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => signInWithOAuth('google')}
-                      className="flex-1 py-2.5 px-3 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <i className="bi bi-google text-rose-500"></i> Google
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => signInWithOAuth('github')}
-                      className="flex-1 py-2.5 px-3 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <i className="bi bi-github"></i> GitHub
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* PELACAK GPS HANDPHONE SPRINTER */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                  <i className="bi bi-geo-alt-fill text-teal-500"></i> Pelacak GPS Handphone Sprinter
-                </h3>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1.5 ${
-                    isGpsBroadcasting
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      isGpsBroadcasting ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'
+                    onClick={handleToggleGps}
+                    className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm cursor-pointer transition flex items-center justify-center gap-2 shadow-sm ${
+                      isGpsBroadcasting
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                        : 'bg-teal-600 hover:bg-teal-700 text-white'
                     }`}
-                  ></span>
-                  {isGpsBroadcasting ? 'GPS Aktif (Broadcasting)' : 'GPS Nonaktif'}
-                </span>
-              </div>
-
-              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
-                Fitur ini membaca GPS langsung dari browser handphone sprinter dan menyinkronkannya ke cloud database. 
-                Tidak memerlukan akun email pihak ketiga atau alat tracker berbayar.
-              </p>
-
-              {/* Identity & Switch */}
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 mb-4 space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1.5">
-                    Nama Sprinter (Pengguna HP Ini)
-                  </label>
-                  <select
-                    value={mySprinterIdentity}
-                    disabled={isGpsBroadcasting}
-                    onChange={(e) => {
-                      setMySprinterIdentity(e.target.value);
-                      localStorage.setItem('sprinter_my_name', e.target.value);
-                    }}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-800 dark:text-slate-200 disabled:opacity-60"
                   >
-                    <option value="">-- Pilih Nama Sprinter Anda --</option>
-                    {data.users.map((u) => (
-                      <option key={u.ID} value={u.Nama}>
-                        {u.Nama} ({u.Posisi})
-                      </option>
-                    ))}
-                  </select>
+                    <i className={`bi ${isGpsBroadcasting ? 'bi-stop-circle-fill' : 'bi-broadcast-pin'} text-base`}></i>
+                    <span>{isGpsBroadcasting ? 'Matikan Siaran GPS HP' : 'Mulai Siaran Live GPS HP'}</span>
+                  </button>
                 </div>
 
-                {gpsError && (
-                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
-                    <i className="bi bi-exclamation-triangle-fill text-rose-500 mt-0.5"></i>
-                    <div>{gpsError}</div>
-                  </div>
-                )}
-
-                {/* GPS Info Badge if active */}
-                {currentGpsCoords && (
-                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-teal-200 dark:border-teal-800/60 text-xs space-y-1">
-                    <div className="flex items-center justify-between text-teal-700 dark:text-teal-300 font-bold">
-                      <span className="flex items-center gap-1.5">
-                        <i className="bi bi-pin-map-fill"></i> Koordinat HP Anda:
-                      </span>
-                      <span className="font-mono">
-                        {currentGpsCoords.latitude.toFixed(5)}, {currentGpsCoords.longitude.toFixed(5)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[11px] text-slate-500">
-                      <span>
-                        Akurasi: &plusmn;{currentGpsCoords.accuracy ? Math.round(currentGpsCoords.accuracy) : 0} meter
-                      </span>
-                      <span>Update: {formatTimeAgo(currentGpsCoords.timestamp)}</span>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handleToggleGps}
-                  className={`w-full py-3.5 px-4 rounded-xl font-bold text-sm cursor-pointer transition flex items-center justify-center gap-2 shadow-sm ${
-                    isGpsBroadcasting
-                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                      : 'bg-teal-600 hover:bg-teal-700 text-white'
-                  }`}
-                >
-                  <i className={`bi ${isGpsBroadcasting ? 'bi-stop-circle-fill' : 'bi-broadcast-pin'} text-base`}></i>
-                  <span>{isGpsBroadcasting ? 'Matikan Siaran GPS HP' : 'Mulai Siaran Live GPS HP'}</span>
-                </button>
-              </div>
-
-              {/* Status Semua Sprinter */}
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5 flex items-center justify-between">
-                  <span>Daftar Sprinter & Lokasi Terakhir</span>
-                  <span className="text-[10px] lowercase font-normal">
-                    {(data.sprinterLocations || []).filter((l) => l.isActive).length} online
-                  </span>
-                </h4>
-                <div className="space-y-2">
-                  {data.users
-                    .filter((u) => u.Posisi.toLowerCase().includes('sprinter') || true)
-                    .map((sprinter) => {
-                      const loc = (data.sprinterLocations || []).find(
-                        (l) => (l.karyawanNama || '').toLowerCase() === sprinter.Nama.toLowerCase()
-                      );
-                      const isOnline = loc && loc.isActive;
-                      return (
-                        <div
-                          key={sprinter.ID}
-                          className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60 text-xs"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span
-                              className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                                isOnline ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
-                              }`}
-                            ></span>
-                            <div className="truncate">
-                              <span className="font-bold text-slate-800 dark:text-slate-200">{sprinter.Nama}</span>
-                              <div className="text-[10px] text-slate-400">
-                                {isOnline && loc
-                                  ? `Online • ${formatTimeAgo(loc.waktuUpdate)} (±${Math.round(loc.accuracy || 0)}m)`
-                                  : loc
-                                  ? `Terakhir online ${formatTimeAgo(loc.waktuUpdate)}`
-                                  : 'Belum pernah aktif'}
+                {/* Status Semua Sprinter */}
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2.5 flex items-center justify-between">
+                    <span>Daftar Sprinter & Lokasi Terakhir</span>
+                    <span className="text-[10px] lowercase font-normal">
+                      {(data.sprinterLocations || []).filter((l) => l.isActive).length} online
+                    </span>
+                  </h4>
+                  <div className="space-y-2">
+                    {data.users
+                      .filter((u) => u.Posisi.toLowerCase().includes('sprinter') || true)
+                      .map((sprinter) => {
+                        const loc = (data.sprinterLocations || []).find(
+                          (l) => (l.karyawanNama || '').toLowerCase() === sprinter.Nama.toLowerCase()
+                        );
+                        const isOnline = loc && loc.isActive;
+                        return (
+                          <div
+                            key={sprinter.ID}
+                            className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/60 text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span
+                                className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                  isOnline ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                                }`}
+                              ></span>
+                              <div className="truncate">
+                                <span className="font-bold text-slate-800 dark:text-slate-200">{sprinter.Nama}</span>
+                                <div className="text-[10px] text-slate-400">
+                                  {isOnline && loc
+                                    ? `Online • ${formatTimeAgo(loc.waktuUpdate)} (±${Math.round(loc.accuracy || 0)}m)`
+                                    : loc
+                                    ? `Terakhir online ${formatTimeAgo(loc.waktuUpdate)}`
+                                    : 'Belum pernah aktif'}
+                                </div>
                               </div>
                             </div>
+                            {loc && (
+                              <a
+                                href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold text-[11px] hover:bg-teal-100 transition shrink-0 flex items-center gap-1 border border-teal-200 dark:border-teal-700"
+                              >
+                                <i className="bi bi-geo-alt"></i> Peta
+                              </a>
+                            )}
                           </div>
-                          {loc && (
-                            <a
-                              href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold text-[11px] hover:bg-teal-100 transition shrink-0 flex items-center gap-1 border border-teal-200 dark:border-teal-700"
-                            >
-                              <i className="bi bi-geo-alt"></i> Peta
-                            </a>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* KELOLA KARYAWAN */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 mb-6">
-              <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                <i className="bi bi-people-fill text-teal-500"></i> Kelola Karyawan
-              </h3>
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 mb-4">
-                <div className="grid grid-cols-2 gap-3 mb-3">
+            {/* TAB 3: KELOLA KATEGORI */}
+            {settingTab === 'kategori' && (
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 mb-6 animate-fade-in">
+                <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                  <i className="bi bi-tags-fill text-teal-500"></i> Kelola Kategori Tugas
+                </h3>
+                <div className="flex gap-2 mb-4">
                   <input
                     type="text"
-                    value={newUserId}
-                    onChange={(e) => setNewUserId(e.target.value)}
-                    className="p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
-                    placeholder="ID (Cth: EMP-04)"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    className="flex-1 p-3 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
+                    placeholder="Nama kategori baru..."
                   />
-                  <input
-                    type="text"
-                    value={newUserName}
-                    onChange={(e) => setNewUserName(e.target.value)}
-                    className="p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
-                    placeholder="Nama Lengkap"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <select
-                    value={newUserRole}
-                    onChange={(e) => setNewUserRole(e.target.value)}
-                    className="flex-1 p-2.5 border border-slate-200 rounded-xl bg-white dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
-                  >
-                    <option value="Sprinter">Sprinter</option>
-                    <option value="Produksi">Produksi</option>
-                    <option value="Admin">Admin</option>
-                  </select>
                   <button
                     type="button"
-                    onClick={handleAddKaryawan}
-                    className="bg-teal-600 hover:bg-teal-700 text-white px-5 rounded-xl font-bold text-sm cursor-pointer transition"
+                    onClick={handleAddCategory}
+                    className="bg-teal-600 hover:bg-teal-700 text-white px-4 rounded-xl font-bold cursor-pointer transition text-sm shadow-xs"
                   >
                     Tambah
                   </button>
                 </div>
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {data.categories.map((cat) => (
+                    <div
+                      key={cat}
+                      className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl"
+                    >
+                      <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">{cat}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteCategory(cat)}
+                        className="text-rose-500 hover:text-rose-700 cursor-pointer p-1"
+                        title="Hapus Kategori"
+                      >
+                        <i className="bi bi-trash-fill"></i>
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
+            )}
 
-              <div className="overflow-x-auto border border-slate-100 dark:border-slate-800 rounded-xl max-h-60 overflow-y-auto">
-                <table className="w-full text-left">
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-                    {data.users.map((u) => (
-                      <tr key={u.ID}>
-                        <td className="p-3 text-slate-800 dark:text-slate-200">
-                          <b>{u.Nama}</b>
-                          <br />
-                          <span className="text-xs text-slate-500">
-                            {u.ID} &bull; {u.Posisi}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteKaryawan(u.ID)}
-                            className="text-rose-500 hover:text-rose-700 cursor-pointer p-1"
-                          >
-                            <i className="bi bi-trash-fill"></i>
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {/* TAB 4: INFORMASI, INSTALASI APP HP & SUPABASE */}
+            {settingTab === 'informasi' && (
+              <div className="space-y-5 animate-fade-in">
+                {/* 1. INSTALASI APLIKASI HANDPHONE (PWA) */}
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                      <i className="bi bi-phone-vibrate-fill text-teal-500"></i> Install Aplikasi di Handphone
+                    </h3>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        isAppInstalled
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                          : 'bg-teal-100 text-teal-700 dark:bg-teal-950/60 dark:text-teal-300'
+                      }`}
+                    >
+                      {isAppInstalled ? 'Sudah Terpasang' : 'Tersedia untuk HP'}
+                    </span>
+                  </div>
 
-            {/* KELOLA KATEGORI */}
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 mb-6">
-              <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                <i className="bi bi-tags-fill text-teal-500"></i> Kelola Kategori Tugas
-              </h3>
-              <div className="flex gap-2 mb-4">
-                <input
-                  type="text"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  className="flex-1 p-3 border border-slate-200 rounded-xl bg-slate-50 dark:bg-slate-800 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200"
-                  placeholder="Nama kategori baru..."
-                />
-                <button
-                  type="button"
-                  onClick={handleAddCategory}
-                  className="bg-teal-600 hover:bg-teal-700 text-white px-4 rounded-xl font-bold cursor-pointer transition text-sm"
-                >
-                  Tambah
-                </button>
-              </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {data.categories.map((cat) => (
-                  <div
-                    key={cat}
-                    className="flex justify-between items-center p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-xl"
-                  >
-                    <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">{cat}</span>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
+                    Pasang aplikasi ini di layar utama handphone sprinter Anda agar dapat dibuka seperti aplikasi Android/iOS asli tanpa membuka browser berulang kali.
+                  </p>
+
+                  <div className="p-4 bg-teal-50/70 dark:bg-teal-950/30 rounded-2xl border border-teal-200/60 dark:border-teal-800/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                        <i className="bi bi-app-indicator"></i>
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-800 dark:text-white">Sprinter Mahada Mobile</h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">Ringan, cepat, dan hemat kuota</p>
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => handleDeleteCategory(cat)}
-                      className="text-rose-500 hover:text-rose-700 cursor-pointer p-1"
+                      onClick={handleInstallClick}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
                     >
-                      <i className="bi bi-trash-fill"></i>
+                      <i className="bi bi-download"></i>
+                      <span>{isAppInstalled ? 'Petunjuk Instalasi' : 'Pasang di Handphone'}</span>
                     </button>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* DATABASE BACKEND INFO (SUPABASE) */}
-            <div className="p-4 bg-teal-50 dark:bg-teal-900/20 rounded-2xl border border-teal-100 dark:border-teal-800/40 text-xs text-teal-800 dark:text-teal-300 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                    <i className="bi bi-database-fill"></i>
-                  </div>
-                  <div>
-                    <p className="font-bold text-sm text-slate-800 dark:text-white">Database Supabase (PostgreSQL)</p>
-                    <p className="text-[11px] opacity-80">Tabel: tasks, vendors, categories, karyawan, recaps.</p>
-                  </div>
                 </div>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+
+                {/* 2. SUPABASE AUTHENTICATION */}
+                <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                      <i className="bi bi-shield-lock-fill text-teal-500"></i> Autentikasi Supabase
+                    </h3>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      isSupabaseConfigured
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                    }`}>
+                      {isSupabaseConfigured ? 'Supabase Terhubung' : 'Mode Offline / Dev'}
+                    </span>
+                  </div>
+
+                  {user ? (
+                    <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center text-sm shadow-sm">
+                            {user.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-bold text-slate-800 dark:text-white">
+                              {user.email}
+                            </h4>
+                            <p className="text-[10px] text-slate-400 font-mono truncate max-w-[200px]">
+                              UID: {user.id}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={signOutUser}
+                          className="px-3.5 py-2 text-xs font-bold bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl cursor-pointer hover:bg-rose-100 transition"
+                        >
+                          Keluar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Masuk atau daftar dengan akun Supabase untuk mengelola data operasional kurir secara cloud.
+                      </p>
+
+                      <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl gap-1">
+                        <button
+                          type="button"
+                          onClick={() => { setAuthMode('signin'); setAuthMsg(null); }}
+                          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                            authMode === 'signin' ? 'bg-white dark:bg-slate-900 text-teal-600 shadow-sm' : 'text-slate-500'
+                          }`}
+                        >
+                          Masuk
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setAuthMode('signup'); setAuthMsg(null); }}
+                          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                            authMode === 'signup' ? 'bg-white dark:bg-slate-900 text-teal-600 shadow-sm' : 'text-slate-500'
+                          }`}
+                        >
+                          Daftar Baru
+                        </button>
+                      </div>
+
+                      {authMsg && (
+                        <div className={`p-3 rounded-xl text-xs font-medium ${
+                          authMsg.error
+                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                            : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+                        }`}>
+                          {authMsg.text}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <input
+                          type="email"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          placeholder="Email Supabase"
+                          className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200"
+                        />
+                        <input
+                          type="password"
+                          value={authPassword}
+                          onChange={(e) => setAuthPassword(e.target.value)}
+                          placeholder="Kata Sandi (min 6 karakter)"
+                          className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm text-slate-800 dark:text-slate-200"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={isSubmittingAuth}
+                        onClick={async () => {
+                          if (!authEmail.trim() || !authPassword.trim()) {
+                            setAuthMsg({ text: 'Email dan kata sandi wajib diisi', error: true });
+                            return;
+                          }
+                          setIsSubmittingAuth(true);
+                          setAuthMsg(null);
+                          try {
+                            if (authMode === 'signin') {
+                              const res = await signInWithEmail(authEmail, authPassword);
+                              if (res.error) {
+                                setAuthMsg({ text: res.error.message || 'Gagal masuk', error: true });
+                              } else {
+                                setAuthMsg({ text: 'Berhasil masuk ke Supabase!', error: false });
+                              }
+                            } else {
+                              const res = await signUpWithEmail(authEmail, authPassword);
+                              if (res.error) {
+                                setAuthMsg({ text: res.error.message || 'Gagal mendaftar', error: true });
+                              } else {
+                                setAuthMsg({ text: 'Pendaftaran berhasil! Cek email untuk verifikasi.', error: false });
+                              }
+                            }
+                          } catch (err: any) {
+                            setAuthMsg({ text: err.message || 'Terjadi kesalahan autentikasi', error: true });
+                          } finally {
+                            setIsSubmittingAuth(false);
+                          }
+                        }}
+                        className="w-full py-3 px-4 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl text-sm transition cursor-pointer shadow-sm disabled:opacity-50"
+                      >
+                        {isSubmittingAuth
+                          ? 'Memproses...'
+                          : authMode === 'signin'
+                          ? 'Masuk ke Akun'
+                          : 'Daftar Akun Baru'}
+                      </button>
+
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => signInWithOAuth('google')}
+                          className="flex-1 py-2.5 px-3 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <i className="bi bi-google text-rose-500"></i> Google
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => signInWithOAuth('github')}
+                          className="flex-1 py-2.5 px-3 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <i className="bi bi-github"></i> GitHub
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. DATABASE BACKEND INFO (SUPABASE) */}
+                <div className="p-4 bg-teal-50 dark:bg-teal-900/20 rounded-2xl border border-teal-100 dark:border-teal-800/40 text-xs text-teal-800 dark:text-teal-300 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        <i className="bi bi-database-fill"></i>
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-slate-800 dark:text-white">Database Supabase (PostgreSQL)</p>
+                        <p className="text-[11px] opacity-80">Tabel: tasks, vendors, categories, karyawan, recaps, sprinter_locations.</p>
+                      </div>
+                    </div>
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    Aplikasi ini dikonfigurasi untuk bekerja dengan cloud database Supabase. Anda dapat menghubungkan proyek Supabase Anda dengan memasukkan <code>VITE_SUPABASE_URL</code> dan <code>VITE_SUPABASE_ANON_KEY</code> pada environment.
+                  </p>
+                </div>
               </div>
-              <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                Aplikasi ini dikonfigurasi untuk bekerja dengan backend Supabase. Anda dapat menghubungkan proyek Supabase Anda dengan memasukkan <code>VITE_SUPABASE_URL</code> dan <code>VITE_SUPABASE_ANON_KEY</code> pada environment.
-              </p>
-            </div>
+            )}
           </div>
         )}
 
@@ -2995,6 +3185,105 @@ export function SprinterApp() {
                 Simpan Vendor
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL INSTALL APLIKASI HANDPHONE (PWA) */}
+      {showInstallModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowInstallModal(false);
+          }}
+          className="fixed inset-0 bg-slate-900/70 z-[9999] flex justify-center items-end sm:items-center backdrop-blur-sm p-0 sm:p-4 animate-fade-in"
+        >
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[2rem] sm:rounded-[2rem] p-5 sm:p-6 shadow-2xl border border-slate-100 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-teal-600 text-white flex items-center justify-center shadow-md">
+                  <i className="bi bi-phone-vibrate text-xl"></i>
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-800 dark:text-white">Install Sprinter Mahada</h3>
+                  <p className="text-[11px] text-slate-400">Pasang di layar utama handphone Anda</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInstallModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex justify-center items-center text-slate-500 hover:text-slate-800 dark:hover:text-white cursor-pointer transition"
+              >
+                <i className="bi bi-x-lg text-sm"></i>
+              </button>
+            </div>
+
+            <div className="p-3 bg-teal-50 dark:bg-teal-950/40 rounded-2xl border border-teal-200/70 dark:border-teal-800/60 text-xs text-teal-800 dark:text-teal-200 space-y-1.5">
+              <div className="font-bold flex items-center gap-1.5">
+                <i className="bi bi-lightning-charge-fill text-amber-500"></i> Keunggulan Aplikasi HP:
+              </div>
+              <ul className="list-disc list-inside space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+                <li>Buka cepat langsung dari ikon layar depan HP</li>
+                <li>Tampilan layar penuh tanpa bilah URL browser</li>
+                <li>Pelacak GPS sprinter bekerja stabil & hemat baterai</li>
+              </ul>
+            </div>
+
+            {/* PLATFORM INSTRUCTIONS */}
+            <div className="space-y-3">
+              {/* Android Chrome */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                <div className="font-bold text-slate-800 dark:text-white text-xs flex items-center gap-2 mb-2">
+                  <i className="bi bi-android2 text-emerald-500 text-base"></i> Pengguna Android (Google Chrome):
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                  <li>Buka aplikasi di Chrome, lalu tekan ikon <strong>titik tiga (&vellip;)</strong> di sudut kanan atas browser.</li>
+                  <li>Pilih menu <strong>"Instal Aplikasi"</strong> atau <strong>"Tambahkan ke Layar Utama"</strong>.</li>
+                  <li>Klik tombol <strong>"Instal"</strong> saat jendela konfirmasi muncul.</li>
+                </ol>
+              </div>
+
+              {/* iOS Safari */}
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
+                <div className="font-bold text-slate-800 dark:text-white text-xs flex items-center gap-2 mb-2">
+                  <i className="bi bi-apple text-slate-800 dark:text-slate-200 text-base"></i> Pengguna iPhone / iPad (Safari):
+                </div>
+                <ol className="list-decimal list-inside space-y-1 text-slate-600 dark:text-slate-300 text-[11px] leading-relaxed">
+                  <li>Buka website di browser Safari, tekan tombol <strong>Bagikan (Share <i className="bi bi-box-arrow-up text-teal-500"></i>)</strong> di bagian bawah.</li>
+                  <li>Gulir ke bawah dan pilih opsi <strong>"Tambahkan ke Layar Utama (Add to Home Screen)"</strong>.</li>
+                  <li>Klik <strong>"Tambah"</strong> di sudut kanan atas layar.</li>
+                </ol>
+              </div>
+            </div>
+
+            {deferredPrompt && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await deferredPrompt.prompt();
+                    const choice = await deferredPrompt.userChoice;
+                    if (choice && choice.outcome === 'accepted') {
+                      showToast('Menginstal aplikasi ke HP...');
+                    }
+                    setDeferredPrompt(null);
+                    setShowInstallModal(false);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-2xl text-xs transition cursor-pointer shadow-md flex items-center justify-center gap-2"
+              >
+                <i className="bi bi-download"></i> Pasang Otomatis Sekarang
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowInstallModal(false)}
+              className="w-full py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-2xl text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+            >
+              Tutup
+            </button>
           </div>
         </div>
       )}
