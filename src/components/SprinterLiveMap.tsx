@@ -34,11 +34,16 @@ export function SprinterLiveMap({
     if (!mapContainerRef.current) return;
     if (mapInstanceRef.current) return;
 
-    // Default center Jakarta
+    // Invalidate size on mount & when container becomes visible
+    const resizeTimer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+
+    // Default center fallback (Indonesia / Central)
     const defaultCenter: [number, number] = [-6.2088, 106.8456];
     const map = L.map(mapContainerRef.current, {
       center: defaultCenter,
-      zoom: 12,
+      zoom: 14,
       zoomControl: true,
       attributionControl: false,
     });
@@ -53,11 +58,35 @@ export function SprinterLiveMap({
     markersLayerRef.current = markersLayer;
     mapInstanceRef.current = map;
 
+    // Try centering on user's current device position if no locations yet
+    if (navigator.geolocation && locations.length === 0) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (mapInstanceRef.current && locations.length === 0) {
+            mapInstanceRef.current.setView([pos.coords.latitude, pos.coords.longitude], 15);
+          }
+        },
+        () => {},
+        { timeout: 5000, enableHighAccuracy: false }
+      );
+    }
+
     return () => {
+      clearTimeout(resizeTimer);
       map.remove();
       mapInstanceRef.current = null;
     };
   }, []);
+
+  // Invalidate size whenever tab or dimensions change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [locations, selectedSprinterId]);
 
   // Update Markers when locations or tasks change
   useEffect(() => {
@@ -76,9 +105,21 @@ export function SprinterLiveMap({
     }
 
     const bounds: [number, number][] = [];
+    let selectedMarkerPos: [number, number] | null = null;
 
     activeLocations.forEach((loc) => {
-      bounds.push([loc.latitude, loc.longitude]);
+      const pos: [number, number] = [loc.latitude, loc.longitude];
+      bounds.push(pos);
+
+      const isSelected =
+        selectedSprinterId &&
+        (selectedSprinterId === loc.karyawanId ||
+          selectedSprinterId === loc.id ||
+          selectedSprinterId.toLowerCase() === (loc.karyawanNama || '').toLowerCase());
+
+      if (isSelected) {
+        selectedMarkerPos = pos;
+      }
 
       // Find in-progress tasks for this sprinter
       const sprinterTasks = tasks.filter(
@@ -89,7 +130,6 @@ export function SprinterLiveMap({
       const onGoingTasks = sprinterTasks.filter((t) => t.Status === 'Dalam Perjalanan');
       const pendingTasks = sprinterTasks.filter((t) => t.Status === 'Pending');
 
-      const isSelected = selectedSprinterId === loc.karyawanId || selectedSprinterId === loc.id;
       const isLive = loc.isActive !== false;
 
       // Custom pulsing HTML marker
@@ -141,8 +181,8 @@ export function SprinterLiveMap({
                 width: 34px;
                 height: 34px;
                 border-radius: 50%;
-                background: ${isLive ? '#0f766e' : '#475569'};
-                border: 3px solid white;
+                background: ${isLive ? (isSelected ? '#042f2e' : '#0f766e') : '#475569'};
+                border: 3px solid ${isSelected ? '#2dd4bf' : 'white'};
                 box-shadow: 0 4px 12px rgba(0,0,0,0.35);
                 display: flex;
                 align-items: center;
@@ -159,7 +199,7 @@ export function SprinterLiveMap({
               height: 0;
               border-left: 6px solid transparent;
               border-right: 6px solid transparent;
-              border-top: 7px solid ${isLive ? '#0f766e' : '#475569'};
+              border-top: 7px solid ${isLive ? (isSelected ? '#042f2e' : '#0f766e') : '#475569'};
               margin-top: -2px;
             "></div>
           </div>
@@ -169,7 +209,7 @@ export function SprinterLiveMap({
         popupAnchor: [0, -50],
       });
 
-      const marker = L.marker([loc.latitude, loc.longitude], { icon: customIcon });
+      const marker = L.marker(pos, { icon: customIcon });
 
       const googleMapsUrl = `https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`;
       const timeStr = loc.waktuUpdate ? loc.waktuUpdate.replace('T', ' ').substring(0, 19) : '-';
@@ -241,18 +281,58 @@ export function SprinterLiveMap({
       marker.addTo(layer);
     });
 
-    if (bounds.length > 0) {
-      if (bounds.length === 1) {
-        map.setView(bounds[0], 15);
-      } else {
-        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 });
-      }
+    // Smart Focus & Zoom handling
+    if (selectedMarkerPos) {
+      // Focus directly on the selected sprinter with close street zoom (17)
+      map.setView(selectedMarkerPos, 17, { animate: true });
+    } else if (bounds.length === 1) {
+      // Single active sprinter: zoom in close so the location is precise
+      map.setView(bounds[0], 16.5, { animate: true });
+    } else if (bounds.length > 1) {
+      // Multiple active sprinters: fit bounds with good padding, maxZoom 17
+      map.fitBounds(bounds, { padding: [45, 45], maxZoom: 17 });
     }
   }, [locations, tasks, selectedSprinterId, onSelectSprinter]);
+
+  const handleRecenter = () => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.invalidateSize();
+    const activeLocations = locations.filter(
+      (loc) => loc.latitude && loc.longitude && !isNaN(loc.latitude) && !isNaN(loc.longitude)
+    );
+    if (activeLocations.length === 0) {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 16),
+          () => map.setView([-6.2088, 106.8456], 15)
+        );
+      }
+      return;
+    }
+    if (activeLocations.length === 1) {
+      map.setView([activeLocations[0].latitude, activeLocations[0].longitude], 17, { animate: true });
+    } else {
+      const bounds: [number, number][] = activeLocations.map((l) => [l.latitude, l.longitude]);
+      map.fitBounds(bounds, { padding: [45, 45], maxZoom: 17 });
+    }
+  };
 
   return (
     <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
       <div ref={mapContainerRef} className={className} style={{ minHeight: '260px' }} />
+
+      {/* Floating Recenter Button */}
+      <button
+        type="button"
+        onClick={handleRecenter}
+        className="absolute top-3 right-3 z-[400] px-3 py-1.5 rounded-xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shadow-md border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 hover:bg-teal-50 dark:hover:bg-slate-800 transition active:scale-95 cursor-pointer"
+        title="Pusatkan Peta ke Titik Sprinter Tepat"
+      >
+        <i className="bi bi-crosshair2 text-teal-600 dark:text-teal-400 text-sm"></i>
+        <span>Pusatkan Titik</span>
+      </button>
+
       {locations.length === 0 && (
         <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center pointer-events-none">
           <div className="bg-white/90 dark:bg-slate-900/90 px-4 py-2 rounded-xl shadow-lg border border-white/20 text-xs font-semibold text-slate-700 dark:text-slate-300">

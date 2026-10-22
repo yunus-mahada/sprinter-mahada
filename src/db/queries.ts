@@ -1,4 +1,4 @@
-import { eq, desc, asc } from 'drizzle-orm';
+import { eq, desc, asc, or } from 'drizzle-orm';
 import { db } from './index.ts';
 import { tasks, vendors, categories, karyawan, recaps, sprinterLocations } from './schema.ts';
 import { supabase, isSupabaseConfigured } from '../lib/supabase.ts';
@@ -16,6 +16,18 @@ export async function getAllData() {
       ]);
 
       if (!tasksRes.error && tasksRes.data) {
+        const existingUsers = karyawanRes.data || [];
+        const existingUserIds = new Set(existingUsers.map((k: any) => k.id));
+        const existingUserNames = new Set(existingUsers.map((k: any) => (k.nama || '').trim().toLowerCase()));
+
+        // Only include sprinter locations for karyawan that still exist in the database
+        const validSprinterLocs = (sprinterLocsRes?.data || []).filter(
+          (l: any) =>
+            existingUserIds.has(l.karyawan_id) ||
+            existingUserIds.has(l.id) ||
+            existingUserNames.has((l.karyawan_nama || '').trim().toLowerCase())
+        );
+
         return {
           tasks: tasksRes.data.map((t: any) => ({
             ID: t.id,
@@ -43,7 +55,7 @@ export async function getAllData() {
             LinkMaps: v.link_maps || '',
           })),
           categories: (categoriesRes.data || []).map((c: any) => c.nama),
-          users: (karyawanRes.data || []).map((k: any) => ({
+          users: existingUsers.map((k: any) => ({
             ID: k.id,
             Nama: k.nama,
             Posisi: k.posisi,
@@ -53,7 +65,7 @@ export async function getAllData() {
             Karyawan: r.karyawan || '',
             UangCash: r.uang_cash,
           })),
-          sprinterLocations: (sprinterLocsRes?.data || []).map((l: any) => ({
+          sprinterLocations: validSprinterLocs.map((l: any) => ({
             id: l.id,
             karyawanId: l.karyawan_id,
             karyawanNama: l.karyawan_nama,
@@ -118,17 +130,28 @@ export async function getAllData() {
         Karyawan: r.karyawan || '',
         UangCash: r.uangCash,
       })),
-      sprinterLocations: allSprinterLocs.map((l) => ({
-        id: l.id,
-        karyawanId: l.karyawanId,
-        karyawanNama: l.karyawanNama,
-        latitude: parseFloat(l.latitude) || 0,
-        longitude: parseFloat(l.longitude) || 0,
-        accuracy: l.accuracy ? parseFloat(l.accuracy) : undefined,
-        speed: l.speed ? parseFloat(l.speed) : undefined,
-        waktuUpdate: l.waktuUpdate,
-        isActive: l.isActive === 'true',
-      })),
+      sprinterLocations: (() => {
+        const activeIds = new Set(allKaryawan.map((k) => k.id));
+        const activeNames = new Set(allKaryawan.map((k) => (k.nama || '').trim().toLowerCase()));
+        return allSprinterLocs
+          .filter(
+            (l) =>
+              activeIds.has(l.karyawanId) ||
+              activeIds.has(l.id) ||
+              activeNames.has((l.karyawanNama || '').trim().toLowerCase())
+          )
+          .map((l) => ({
+            id: l.id,
+            karyawanId: l.karyawanId,
+            karyawanNama: l.karyawanNama,
+            latitude: parseFloat(l.latitude) || 0,
+            longitude: parseFloat(l.longitude) || 0,
+            accuracy: l.accuracy ? parseFloat(l.accuracy) : undefined,
+            speed: l.speed ? parseFloat(l.speed) : undefined,
+            waktuUpdate: l.waktuUpdate,
+            isActive: l.isActive === 'true',
+          }));
+      })(),
     };
   } catch (error) {
     console.error('Failed to fetch data:', error);
@@ -411,6 +434,8 @@ export async function upsertKaryawan(data: { ID: string; Nama: string; Posisi?: 
 export async function deleteKaryawan(id: string) {
   if (isSupabaseConfigured) {
     try {
+      // Also delete any existing GPS location for this karyawan
+      await supabase.from('sprinter_locations').delete().or(`karyawan_id.eq.${id},id.eq.${id}`);
       const { error } = await supabase.from('karyawan').delete().eq('id', id);
       if (!error) {
         return [{ id }];
@@ -422,6 +447,7 @@ export async function deleteKaryawan(id: string) {
   }
 
   try {
+    await db.delete(sprinterLocations).where(or(eq(sprinterLocations.karyawanId, id), eq(sprinterLocations.id, id)));
     return await db.delete(karyawan).where(eq(karyawan.id, id)).returning();
   } catch (error) {
     console.error('Failed to delete karyawan:', error);

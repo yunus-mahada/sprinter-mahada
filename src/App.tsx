@@ -355,8 +355,8 @@ export function SprinterApp() {
       speed?: number | null;
     }) => {
       const now = Date.now();
-      // Rate limit to once every 8 seconds
-      if (now - lastSent < 8000) return;
+      // Rate limit to once every 7 seconds
+      if (now - lastSent < 7000) return;
       lastSent = now;
 
       const userObj = data.users.find((u) => u.Nama.trim() === mySprinterIdentity.trim());
@@ -390,6 +390,31 @@ export function SprinterApp() {
       }
     };
 
+    // 1. Screen Wake Lock to prevent screen turning off while driving
+    let wakeLockSentinel: any = null;
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator && (navigator as any).wakeLock?.request) {
+          wakeLockSentinel = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch (e) {
+        // WakeLock may fail if battery is low or not supported
+      }
+    };
+    requestWakeLock();
+
+    // 2. Inaudible silent audio loop keep-alive to keep mobile browser thread active in background
+    let audioKeepAlive: HTMLAudioElement | null = null;
+    try {
+      audioKeepAlive = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+      audioKeepAlive.loop = true;
+      audioKeepAlive.volume = 0.01;
+      audioKeepAlive.play().catch(() => {});
+    } catch (e) {
+      // Audio playback might require user gesture, already triggered on toggle button click
+    }
+
+    // 3. Main Geolocation Watch
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const coords = {
@@ -416,12 +441,63 @@ export function SprinterApp() {
       {
         enableHighAccuracy: true,
         timeout: 20000,
-        maximumAge: 5000,
+        maximumAge: 4000,
       }
     );
 
+    // 4. Fallback interval ping (every 15s) in case watchPosition throttles on background
+    const intervalPing = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const coords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            speed: pos.coords.speed,
+            timestamp: new Date().toISOString(),
+          };
+          setCurrentGpsCoords(coords);
+          sendGpsUpdate(coords);
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+      );
+    }, 15000);
+
+    // 5. Page visibility change auto-sync (instant ping when user returns to app)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const coords = {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              speed: pos.coords.speed,
+              timestamp: new Date().toISOString(),
+            };
+            setCurrentGpsCoords(coords);
+            sendGpsUpdate(coords);
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 10000 }
+        );
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       navigator.geolocation.clearWatch(watchId);
+      clearInterval(intervalPing);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (wakeLockSentinel) {
+        wakeLockSentinel.release().catch(() => {});
+      }
+      if (audioKeepAlive) {
+        audioKeepAlive.pause();
+        audioKeepAlive.src = '';
+      }
     };
   }, [isGpsBroadcasting, mySprinterIdentity, data.users]);
 
@@ -835,17 +911,52 @@ export function SprinterApp() {
   };
 
   const handleDeleteKaryawan = async (id: string) => {
-    if (!window.confirm('Hapus karyawan ini?')) return;
+    if (!window.confirm('Hapus karyawan ini? Data lokasi radar juga akan dibersihkan.')) return;
     setIsLoading(true);
     try {
+      const targetUser = data.users.find((u) => u.ID === id);
+      const targetName = targetUser ? targetUser.Nama.trim().toLowerCase() : '';
       await api.apiDeleteKaryawan(id);
       setData((prev) => ({
         ...prev,
         users: prev.users.filter((u) => u.ID !== id),
+        sprinterLocations: (prev.sprinterLocations || []).filter(
+          (l) =>
+            l.karyawanId !== id &&
+            l.id !== id &&
+            (!targetName || (l.karyawanNama || '').trim().toLowerCase() !== targetName)
+        ),
       }));
-      showToast('Karyawan dihapus');
+      showToast('Karyawan dan data lokasi radar berhasil dihapus');
     } catch (err: any) {
       showToast(err.message || 'Gagal menghapus');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClearSprinterLocation = async (sprinterNama: string, karyawanId: string) => {
+    if (!window.confirm(`Bersihkan riwayat lokasi radar untuk "${sprinterNama}"?`)) return;
+    setIsLoading(true);
+    try {
+      await api.apiSaveSprinterLocation({
+        id: karyawanId,
+        karyawanId,
+        karyawanNama: sprinterNama,
+        latitude: 0,
+        longitude: 0,
+        waktuUpdate: new Date().toISOString(),
+        isActive: false,
+      });
+      setData((prev) => ({
+        ...prev,
+        sprinterLocations: (prev.sprinterLocations || []).filter(
+          (l) => l.karyawanNama !== sprinterNama && l.id !== karyawanId && l.karyawanId !== karyawanId
+        ),
+      }));
+      showToast(`Lokasi radar ${sprinterNama} berhasil dibersihkan`);
+    } catch (err: any) {
+      showToast('Gagal membersihkan lokasi');
     } finally {
       setIsLoading(false);
     }
@@ -1512,7 +1623,18 @@ export function SprinterApp() {
         {activeTab === 'radar' && (
           <div className="animate-fade-in">
             {(() => {
-              const activeSprinters = (data.sprinterLocations || []).filter(
+              const existingUserIds = new Set(data.users.map((u) => u.ID));
+              const existingUserNames = new Set(data.users.map((u) => (u.Nama || '').trim().toLowerCase()));
+
+              // Filter out any locations of deleted karyawan
+              const validSprinterLocations = (data.sprinterLocations || []).filter(
+                (l) =>
+                  existingUserIds.has(l.karyawanId) ||
+                  existingUserIds.has(l.id) ||
+                  existingUserNames.has((l.karyawanNama || '').trim().toLowerCase())
+              );
+
+              const activeSprinters = validSprinterLocations.filter(
                 (l) => l.isActive && l.latitude && l.longitude
               );
               return (
@@ -1602,7 +1724,7 @@ export function SprinterApp() {
                   <div className="p-4">
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-sm overflow-hidden">
                       <SprinterLiveMap
-                        locations={data.sprinterLocations || []}
+                        locations={validSprinterLocations}
                         tasks={data.tasks}
                         selectedSprinterId={selectedSprinterOnMap}
                         onSelectSprinter={(name) => setSelectedSprinterOnMap(name)}
@@ -2521,6 +2643,30 @@ export function SprinterApp() {
                     <i className={`bi ${isGpsBroadcasting ? 'bi-stop-circle-fill' : 'bi-broadcast-pin'} text-base`}></i>
                     <span>{isGpsBroadcasting ? 'Matikan Siaran GPS HP' : 'Mulai Siaran Live GPS HP'}</span>
                   </button>
+
+                  {/* Background Mode Notice when broadcasting */}
+                  {isGpsBroadcasting && (
+                    <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs space-y-2">
+                      <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                        <span>Mode Latar Belakang (Keep-Alive) Aktif</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-relaxed">
+                        Layar dicegah mati otomatis (WakeLock) dan sistem audio hening diaktifkan agar browser tidak ditidurkan oleh Android saat Anda membuka WhatsApp atau navigasi.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Android Battery Optimization Tip */}
+                  <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/80 text-[11px] text-amber-800 dark:text-amber-300 space-y-1">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-900 dark:text-amber-200">
+                      <i className="bi bi-shield-check"></i>
+                      <span>Tips Agar GPS Tidak Mati Saat Layar Mati:</span>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                      Pada HP Android, buka <strong>Pengaturan HP &rarr; Aplikasi &rarr; Chrome / Sprinter &rarr; Baterai</strong>, lalu pilih <strong>"Tidak Dibatasi" (Unrestricted)</strong> agar Android tidak mematikan pelacak GPS secara otomatis.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Status Semua Sprinter */}
@@ -2561,16 +2707,29 @@ export function SprinterApp() {
                                 </div>
                               </div>
                             </div>
-                            {loc && (
-                              <a
-                                href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold text-[11px] hover:bg-teal-100 transition shrink-0 flex items-center gap-1 border border-teal-200 dark:border-teal-700"
-                              >
-                                <i className="bi bi-geo-alt"></i> Peta
-                              </a>
-                            )}
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {loc && (
+                                <>
+                                  <a
+                                    href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 font-semibold text-[11px] hover:bg-teal-100 transition flex items-center gap-1 border border-teal-200 dark:border-teal-700"
+                                    title="Buka di Google Maps"
+                                  >
+                                    <i className="bi bi-geo-alt"></i> Peta
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleClearSprinterLocation(sprinter.Nama, loc.id || loc.karyawanId || sprinter.ID)}
+                                    className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/60 transition flex items-center justify-center border border-rose-200 dark:border-rose-800 cursor-pointer"
+                                    title="Bersihkan riwayat lokasi radar sprinter ini"
+                                  >
+                                    <i className="bi bi-trash text-xs"></i>
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
