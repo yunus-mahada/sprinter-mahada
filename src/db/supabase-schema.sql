@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS public.vendors (
     id VARCHAR(64) PRIMARY KEY,
     nama TEXT NOT NULL,
     no_hp TEXT DEFAULT '',
-    alamat TEXT NOT NULL,
+    alamat TEXT DEFAULT '',
     link_maps TEXT DEFAULT '',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

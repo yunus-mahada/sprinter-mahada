@@ -29,6 +29,8 @@ export function SprinterLiveMap({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const accuracyLayerRef = useRef<L.LayerGroup | null>(null);
+  const isFirstLoadRef = useRef<boolean>(true);
+  const prevSelectedSprinterRef = useRef<string | undefined>(undefined);
 
   // Initialize Map
   useEffect(() => {
@@ -42,7 +44,6 @@ export function SprinterLiveMap({
       zoom: 15,
       zoomControl: true,
       attributionControl: false,
-      // Smoother panning/zooming
       zoomSnap: 0.5,
       zoomDelta: 0.5,
       wheelPxPerZoomLevel: 120,
@@ -53,7 +54,6 @@ export function SprinterLiveMap({
       maxZoom: 20,
       maxNativeZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
-      // Keep tile in memory for smoother pan
       keepBuffer: 4,
     }).addTo(map);
 
@@ -158,12 +158,25 @@ export function SprinterLiveMap({
 
       const isLive = loc.isActive !== false;
 
-      // Custom pulsing HTML marker
+      // Custom marker perfectly anchored at [0, 0] so it NEVER shifts or moves when zooming!
       const customIcon = L.divIcon({
-        className: 'custom-sprinter-marker',
+        className: '', // Kosongkan agar tidak ada border default leaflet
+        iconSize: [0, 0], // Container 0x0 tepat di koordinat lat,lng
+        iconAnchor: [0, 0], // Titik pivot tepat di 0,0
+        popupAnchor: [0, -65], // Popup muncul di atas pin
         html: `
-          <div style="position: relative; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, -100%);">
-            <!-- Label Tag -->
+          <div style="
+            position: absolute;
+            bottom: 0px;
+            left: 0px;
+            transform: translate(-50%, 0);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: auto;
+            user-select: none;
+          ">
+            <!-- Sprinter Name Tag -->
             <div style="
               background: ${isLive ? (isSelected ? '#0f766e' : '#0d9488') : '#64748b'};
               color: white;
@@ -172,9 +185,9 @@ export function SprinterLiveMap({
               padding: 2px 8px;
               border-radius: 9999px;
               white-space: nowrap;
-              box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
               border: 2px solid white;
-              margin-bottom: 4px;
+              margin-bottom: 3px;
               display: flex;
               align-items: center;
               gap: 4px;
@@ -182,7 +195,7 @@ export function SprinterLiveMap({
               <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: ${
                 isLive ? '#4ade80' : '#cbd5e1'
               };"></span>
-              ${loc.karyawanNama}
+              <span>${loc.karyawanNama}</span>
               ${
                 onGoingTasks.length > 0
                   ? `<span style="background: rgba(0,0,0,0.25); font-size: 9px; padding: 1px 4px; border-radius: 4px;">${onGoingTasks.length} Tgs</span>`
@@ -219,20 +232,20 @@ export function SprinterLiveMap({
                 🛵
               </div>
             </div>
-            <!-- Pin Pointer -->
+
+            <!-- Pin Pointer: Ujung segitiga runcing tepat menyentuh titik koordinat tanah (0,0) -->
             <div style="
               width: 0;
               height: 0;
               border-left: 6px solid transparent;
               border-right: 6px solid transparent;
-              border-top: 7px solid ${isLive ? (isSelected ? '#042f2e' : '#0f766e') : '#475569'};
+              border-top: 8px solid ${isLive ? (isSelected ? '#042f2e' : '#0f766e') : '#475569'};
               margin-top: -2px;
             "></div>
+            <!-- Titik tumpu penanda target -->
+            <div style="width: 4px; height: 2px; background: rgba(0,0,0,0.5); border-radius: 50%;"></div>
           </div>
         `,
-        iconSize: [40, 50],
-        iconAnchor: [20, 50],
-        popupAnchor: [0, -50],
       });
 
       const marker = L.marker(pos, { icon: customIcon });
@@ -327,13 +340,23 @@ export function SprinterLiveMap({
       marker.addTo(layer);
     });
 
-    // Smart Focus & Zoom handling — zoom higher for better precision
-    if (selectedMarkerPos) {
+    // Kamera / Zoom handling:
+    // HANYA atur camera zoom saat PERTAMA KALI load atau saat user sengaja MENGGANTI pilihan sprinter!
+    // JANGAN reset zoom saat pembaruan lokasi GPS berkala (agar zoom dan posisi yang diatur user tidak loncat/bergeser).
+    const selectionChanged = selectedSprinterId !== prevSelectedSprinterRef.current;
+    prevSelectedSprinterRef.current = selectedSprinterId;
+
+    if (selectionChanged && selectedMarkerPos) {
       map.setView(selectedMarkerPos, 18, { animate: true });
-    } else if (bounds.length === 1) {
-      map.setView(bounds[0], 17, { animate: true });
-    } else if (bounds.length > 1) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+    } else if (isFirstLoadRef.current) {
+      isFirstLoadRef.current = false;
+      if (selectedMarkerPos) {
+        map.setView(selectedMarkerPos, 18, { animate: true });
+      } else if (bounds.length === 1) {
+        map.setView(bounds[0], 17, { animate: true });
+      } else if (bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+      }
     }
   }, [locations, tasks, selectedSprinterId, onSelectSprinter]);
 

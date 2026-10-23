@@ -168,7 +168,7 @@ export function SprinterApp() {
   // Filter in Home (cuma Pending, Diproses/Dalam Perjalanan, Selesai, Batal/Gagal)
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'Pending' | 'Dalam Perjalanan' | 'Selesai' | 'Gagal'>('Pending');
-  const [selesaiDateFilter, setSelesaiDateFilter] = useState<string>('');
+  const [selesaiDateFilter, setSelesaiDateFilter] = useState<string>(getTodayDateString());
 
   // PWA Install state
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -674,11 +674,11 @@ export function SprinterApp() {
         (t.JudulTugas + ' ' + t.Tujuan + ' ' + t.PIC + ' ' + t.Karyawan + ' ' + t.Invoice)
           .toLowerCase()
           .includes(kw);
-      // Filter tanggal khusus untuk tab Selesai
+      // Filter tanggal khusus untuk tab Selesai: Default HARI INI saja
+      const effectiveSelesaiDate = selesaiDateFilter || getTodayDateString();
       const matchDate =
         statusFilter !== 'Selesai' ||
-        !selesaiDateFilter ||
-        (t.WaktuUpdate && t.WaktuUpdate.startsWith(selesaiDateFilter));
+        (t.WaktuUpdate && t.WaktuUpdate.startsWith(effectiveSelesaiDate));
       return matchStatus && matchKw && matchDate;
     });
   }, [data.tasks, searchQuery, statusFilter, selesaiDateFilter]);
@@ -691,13 +691,19 @@ export function SprinterApp() {
       Selesai: 0,
       Gagal: 0,
     };
+    const effectiveSelesaiDate = selesaiDateFilter || getTodayDateString();
     for (const t of data.tasks) {
-      if (t.Status && t.Status in counts) {
+      if (t.Status === 'Selesai') {
+        // Hitung tugas selesai hanya untuk tanggal aktif (default hari ini)
+        if (t.WaktuUpdate && t.WaktuUpdate.startsWith(effectiveSelesaiDate)) {
+          counts['Selesai']++;
+        }
+      } else if (t.Status && t.Status in counts) {
         counts[t.Status]++;
       }
     }
     return counts;
-  }, [data.tasks]);
+  }, [data.tasks, selesaiDateFilter]);
 
   // Vendor auto-fill handlers (auto reads address into task inputs)
   const handleVendorDariChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -889,8 +895,8 @@ export function SprinterApp() {
   // Vendor management
   const handleSaveVendor = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!vendorModalData || !vendorModalData.nama.trim() || !vendorModalData.alamat.trim()) {
-      showToast('Nama dan Alamat vendor wajib diisi');
+    if (!vendorModalData || !vendorModalData.nama.trim() || !(vendorModalData.linkMaps || '').trim()) {
+      showToast('Nama vendor dan Link Google Maps wajib diisi!');
       return;
     }
 
@@ -898,8 +904,8 @@ export function SprinterApp() {
     const vendor: Vendor = {
       ID: id,
       Nama: vendorModalData.nama.trim(),
-      NoHP: vendorModalData.noHp.trim(),
-      Alamat: vendorModalData.alamat.trim(),
+      NoHP: (vendorModalData.noHp || '').trim(),
+      Alamat: (vendorModalData.alamat || '').trim(),
       LinkMaps: (vendorModalData.linkMaps || '').trim(),
     };
 
@@ -1345,19 +1351,20 @@ export function SprinterApp() {
                     </span>
                     <input
                       type="date"
-                      value={selesaiDateFilter}
+                      value={selesaiDateFilter || getTodayDateString()}
                       onChange={(e) => setSelesaiDateFilter(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-800/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-xs font-medium text-slate-800 dark:text-slate-200 shadow-2xs"
                     />
                   </div>
-                  {selesaiDateFilter && (
+                  {selesaiDateFilter !== getTodayDateString() && (
                     <button
                       type="button"
-                      onClick={() => setSelesaiDateFilter('')}
-                      className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition text-xs font-medium cursor-pointer flex items-center gap-1.5"
+                      onClick={() => setSelesaiDateFilter(getTodayDateString())}
+                      className="px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition text-xs font-bold cursor-pointer flex items-center gap-1.5 shrink-0"
+                      title="Kembali ke Tugas Selesai Hari Ini"
                     >
-                      <i className="bi bi-x-circle text-[11px]"></i>
-                      <span>Semua Tanggal</span>
+                      <i className="bi bi-arrow-clockwise text-[11px]"></i>
+                      <span>Hari Ini</span>
                     </button>
                   )}
                 </div>
@@ -1458,58 +1465,52 @@ export function SprinterApp() {
                       </div>
 
                       {/* Itinerary Route (Dari -> Tujuan) */}
-                      <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800/60 text-xs space-y-2 mb-3">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800/60 text-xs space-y-2.5 mb-3">
                         {t.Dari && (
                           <div className="flex items-start gap-2.5">
                             <div className="w-2.5 h-2.5 rounded-full border-2 border-teal-500 bg-white dark:bg-slate-900 mt-1 shrink-0"></div>
                             <div className="flex-1 min-w-0">
-                              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider mb-1">
                                 Jemput / Dari
                               </span>
-                              <div className="text-slate-800 dark:text-slate-200 font-medium">
-                                {t.Dari}
-                              </div>
-                              {resDari.vendorMatch && (
-                                <a
-                                  href={resDari.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700 hover:bg-teal-50 transition cursor-pointer"
-                                  title={`Buka Google Maps ${resDari.vendorMatch.Nama}`}
-                                >
-                                  <i className="bi bi-geo-alt-fill text-rose-500"></i>
-                                  <span>{resDari.vendorMatch.Nama}</span>
-                                  <span className="text-[10px] text-teal-600 dark:text-teal-400 underline font-normal">(Buka Maps)</span>
-                                  <i className="bi bi-box-arrow-up-right text-[9px] opacity-70"></i>
-                                </a>
-                              )}
+                              <a
+                                href={resDari.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700/80 hover:bg-teal-50 dark:hover:bg-slate-700/60 transition cursor-pointer shadow-2xs"
+                                title={t.Dari}
+                              >
+                                <i className="bi bi-geo-alt-fill text-rose-500 text-xs"></i>
+                                <span className="font-bold">
+                                  {resDari.vendorMatch ? resDari.vendorMatch.Nama : (t.Dari.split(' - ')[0] || t.Dari)}
+                                </span>
+                                <span className="text-[10px] text-teal-600 dark:text-teal-400 underline font-normal">(Buka Maps)</span>
+                                <i className="bi bi-box-arrow-up-right text-[9px] opacity-70"></i>
+                              </a>
                             </div>
                           </div>
                         )}
 
                         <div className="flex items-start gap-2.5">
-                          <i className="bi bi-geo-alt-fill text-rose-500 mt-0.5 text-sm shrink-0"></i>
+                          <i className="bi bi-geo-alt-fill text-rose-500 mt-1 text-sm shrink-0"></i>
                           <div className="flex-1 min-w-0">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider mb-1">
                               Tujuan Pengiriman
                             </span>
-                            <div className="text-slate-900 dark:text-slate-100 font-medium">
-                              {t.Tujuan}
-                            </div>
-                            {resTujuan.vendorMatch && (
-                              <a
-                                href={resTujuan.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700 hover:bg-teal-50 transition cursor-pointer"
-                                title={`Buka Google Maps ${resTujuan.vendorMatch.Nama}`}
-                              >
-                                <i className="bi bi-geo-alt-fill text-rose-500"></i>
-                                <span>{resTujuan.vendorMatch.Nama}</span>
-                                <span className="text-[10px] text-teal-600 dark:text-teal-400 underline font-normal">(Buka Maps)</span>
-                                <i className="bi bi-box-arrow-up-right text-[9px] opacity-70"></i>
-                              </a>
-                            )}
+                            <a
+                              href={resTujuan.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-700/80 hover:bg-teal-50 dark:hover:bg-slate-700/60 transition cursor-pointer shadow-2xs"
+                              title={t.Tujuan}
+                            >
+                              <i className="bi bi-geo-alt-fill text-rose-500 text-xs"></i>
+                              <span className="font-bold">
+                                {resTujuan.vendorMatch ? resTujuan.vendorMatch.Nama : (t.Tujuan.split(' - ')[0] || t.Tujuan)}
+                              </span>
+                              <span className="text-[10px] text-teal-600 dark:text-teal-400 underline font-normal">(Buka Maps)</span>
+                              <i className="bi bi-box-arrow-up-right text-[9px] opacity-70"></i>
+                            </a>
                           </div>
                         </div>
                       </div>
@@ -3407,20 +3408,24 @@ export function SprinterApp() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700 dark:text-slate-300">Alamat Lengkap *</label>
+                <label className="block text-xs font-bold mb-1 text-slate-700 dark:text-slate-300">
+                  Alamat Lengkap (Opsional)
+                </label>
                 <textarea
-                  required
                   rows={2}
                   value={vendorModalData.alamat}
                   onChange={(e) => setVendorModalData({ ...vendorModalData, alamat: e.target.value })}
-                  placeholder="Alamat lengkap vendor..."
+                  placeholder="Alamat lengkap vendor (opsional)..."
                   className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm"
                 ></textarea>
               </div>
 
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700 dark:text-slate-300">
-                  Link Google Maps (Opsional)
+                <label className="block text-xs font-bold mb-1 text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                  <span>Link Google Maps *</span>
+                  <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold bg-teal-50 dark:bg-teal-950/50 px-2 py-0.5 rounded-md border border-teal-200 dark:border-teal-800">
+                    Wajib
+                  </span>
                 </label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-rose-500">
@@ -3428,14 +3433,15 @@ export function SprinterApp() {
                   </span>
                   <input
                     type="url"
+                    required
                     value={vendorModalData.linkMaps}
                     onChange={(e) => setVendorModalData({ ...vendorModalData, linkMaps: e.target.value })}
                     placeholder="https://maps.app.goo.gl/... atau link Maps"
-                    className="w-full pl-9 pr-3 py-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm"
+                    className="w-full pl-9 pr-3 py-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-teal-500/30"
                   />
                 </div>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  Saat vendor ini terpilih di tugas, nama vendor dapat diklik dan langsung menuju ke tautan maps ini.
+                  Wajib diisi agar sprinter dapat membuka rute lokasi vendor di Google Maps dengan 1 kali klik.
                 </p>
               </div>
 
