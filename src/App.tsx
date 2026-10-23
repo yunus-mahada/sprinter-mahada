@@ -372,9 +372,10 @@ export function SprinterApp() {
     return () => clearInterval(gpsInterval);
   }, []);
 
-  // Refs for persistent background audio keepalive & wakelock
+  // Refs for persistent background audio keepalive, worker heartbeat & wakelock
   const audioKeepAliveRef = useRef<HTMLAudioElement | null>(null);
   const wakeLockSentinelRef = useRef<any>(null);
+  const bgWorkerRef = useRef<Worker | null>(null);
 
   // HTML5 Geolocation watchPosition hook for sprinter mobile GPS broadcast
   useEffect(() => {
@@ -443,7 +444,7 @@ export function SprinterApp() {
     };
     requestWakeLock();
 
-    // 2. Ensure Audio Keep-Alive and MediaSession are running
+    // 2. Ensure Audio Keep-Alive and MediaSession are running with action handlers
     try {
       if (!audioKeepAliveRef.current) {
         const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
@@ -459,6 +460,12 @@ export function SprinterApp() {
           album: 'Pelacakan Posisi GPS Live',
         });
         navigator.mediaSession.playbackState = 'playing';
+        try {
+          navigator.mediaSession.setActionHandler('play', () => {
+            audioKeepAliveRef.current?.play().catch(() => {});
+          });
+          navigator.mediaSession.setActionHandler('pause', () => {});
+        } catch (e) {}
       }
     } catch (e) {}
 
@@ -493,7 +500,48 @@ export function SprinterApp() {
       }
     );
 
-    // 4. Fallback interval ping (every 10s) in case watchPosition throttles in background
+    // 4. Background Web Worker Heartbeat (bypasses main-thread timer throttling in background)
+    try {
+      const workerBlob = new Blob(
+        [
+          `var timer = null;
+          self.onmessage = function(e) {
+            if (e.data === 'start') {
+              if (!timer) {
+                timer = setInterval(function() { self.postMessage('ping'); }, 7000);
+              }
+            } else if (e.data === 'stop') {
+              if (timer) { clearInterval(timer); timer = null; }
+            }
+          };`,
+        ],
+        { type: 'application/javascript' }
+      );
+      const worker = new Worker(URL.createObjectURL(workerBlob));
+      bgWorkerRef.current = worker;
+      worker.onmessage = () => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const coords = {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              speed: pos.coords.speed,
+              timestamp: new Date().toISOString(),
+            };
+            setCurrentGpsCoords(coords);
+            sendGpsUpdate(coords);
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 6500, maximumAge: 0 }
+        );
+      };
+      worker.postMessage('start');
+    } catch (e) {
+      // Fallback to standard setInterval if Web Worker is restricted
+    }
+
+    // 5. Fallback interval ping (every 10s)
     const intervalPing = setInterval(() => {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
@@ -512,33 +560,42 @@ export function SprinterApp() {
       );
     }, 10000);
 
-    // 5. Page visibility change auto-sync (instant refresh when user returns to app)
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        requestWakeLock();
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const coords = {
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-              accuracy: pos.coords.accuracy,
-              speed: pos.coords.speed,
-              timestamp: new Date().toISOString(),
-            };
-            setCurrentGpsCoords(coords);
-            sendGpsUpdate(coords);
-          },
-          () => {},
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      }
+    // 6. Page visibility & focus change auto-sync (instant refresh when user returns to app or wakes screen)
+    const handleWakeSync = () => {
+      requestWakeLock();
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const coords = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            speed: pos.coords.speed,
+            timestamp: new Date().toISOString(),
+          };
+          setCurrentGpsCoords(coords);
+          sendGpsUpdate(coords);
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleWakeSync);
+    window.addEventListener('focus', handleWakeSync);
+    window.addEventListener('pageshow', handleWakeSync);
 
     return () => {
       navigator.geolocation.clearWatch(watchId);
       clearInterval(intervalPing);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleWakeSync);
+      window.removeEventListener('focus', handleWakeSync);
+      window.removeEventListener('pageshow', handleWakeSync);
+      if (bgWorkerRef.current) {
+        try {
+          bgWorkerRef.current.postMessage('stop');
+          bgWorkerRef.current.terminate();
+        } catch (e) {}
+        bgWorkerRef.current = null;
+      }
       if (wakeLockSentinelRef.current) {
         wakeLockSentinelRef.current.release().catch(() => {});
         wakeLockSentinelRef.current = null;
@@ -557,7 +614,14 @@ export function SprinterApp() {
       localStorage.setItem('sprinter_gps_active', 'false');
       showToast('Broadcast GPS Sprinter dinonaktifkan');
 
-      // Stop audio & mediaSession
+      // Stop audio & mediaSession & worker
+      if (bgWorkerRef.current) {
+        try {
+          bgWorkerRef.current.postMessage('stop');
+          bgWorkerRef.current.terminate();
+        } catch (e) {}
+        bgWorkerRef.current = null;
+      }
       if (audioKeepAliveRef.current) {
         audioKeepAliveRef.current.pause();
         audioKeepAliveRef.current = null;
@@ -602,7 +666,19 @@ export function SprinterApp() {
       setIsGpsBroadcasting(true);
       showToast('Mengaktifkan pelacakan GPS live...');
 
-      // Start silent keep-alive immediately in user click event
+      // 1. Request WakeLock immediately in user click event
+      try {
+        if ('wakeLock' in navigator && (navigator as any).wakeLock?.request) {
+          (navigator as any).wakeLock
+            .request('screen')
+            .then((sentinel: any) => {
+              wakeLockSentinelRef.current = sentinel;
+            })
+            .catch(() => {});
+        }
+      } catch (e) {}
+
+      // 2. Start silent keep-alive immediately in user click event
       try {
         if (!audioKeepAliveRef.current) {
           const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==');
@@ -618,6 +694,12 @@ export function SprinterApp() {
             album: 'Pelacakan Posisi GPS Live',
           });
           navigator.mediaSession.playbackState = 'playing';
+          try {
+            navigator.mediaSession.setActionHandler('play', () => {
+              audioKeepAliveRef.current?.play().catch(() => {});
+            });
+            navigator.mediaSession.setActionHandler('pause', () => {});
+          } catch (e) {}
         }
       } catch (e) {
         // ignore
@@ -1932,35 +2014,22 @@ export function SprinterApp() {
         )}
 
         {/* VIEW 2: RADAR POSISI LIVE SPRINTER (Halaman Khusus) */}
+        {/* VIEW 2: RADAR GPS TRACKING */}
         {activeTab === 'radar' && (
           <div className="animate-fade-in">
             {(() => {
               const existingUserIds = new Set(data.users.map((u) => u.ID));
               const existingUserNames = new Set(data.users.map((u) => (u.Nama || '').trim().toLowerCase()));
 
-              // Cek apakah sinyal GPS masih fresh (< 10 menit)
-              // Jika HP dimatikan atau keluar tanpa menonaktifkan, sinyal lama otomatis dianggap offline!
-              const isGpsRecent = (dateStr: string) => {
-                if (!dateStr) return false;
-                try {
-                  const d = new Date(dateStr.replace(' ', 'T'));
-                  const time = d.getTime();
-                  if (isNaN(time)) return false;
-                  const diffMinutes = (Date.now() - time) / (1000 * 60);
-                  return diffMinutes >= -1 && diffMinutes <= 10;
-                } catch {
-                  return false;
-                }
-              };
-
-              // 1. Filter: Hanya sprinter terdaftar, isActive === true, koordinat valid, dan sinyal fresh
+              // 1. Filter: Hanya sprinter terdaftar, isActive === true, dan memiliki koordinat valid
+              // Sprinter TETAP MUNCUL di radar selama siaran GPS tidak dimatikan manual (isActive === true)!
               const rawActive = (data.sprinterLocations || []).filter((l) => {
                 const nameKey = (l.karyawanNama || '').trim().toLowerCase();
                 const userExists =
                   existingUserNames.has(nameKey) ||
                   existingUserIds.has(l.karyawanId) ||
                   existingUserIds.has(l.id);
-                return userExists && l.isActive === true && l.latitude && l.longitude && isGpsRecent(l.waktuUpdate);
+                return userExists && l.isActive === true && l.latitude && l.longitude;
               });
 
               // 2. Sort terbaru di atas untuk prioritas deduplikasi
@@ -1975,6 +2044,20 @@ export function SprinterApp() {
                 }
               }
               const activeSprinters = Array.from(activeSprintersMap.values());
+
+              // Identifikasi sinyal: Live bergerak (< 3.5 menit) vs Standby / HP Sleep (>= 3.5 menit)
+              const liveSprinters = activeSprinters.filter((s) => {
+                if (!s.waktuUpdate) return false;
+                try {
+                  const d = new Date(s.waktuUpdate.replace(' ', 'T'));
+                  return (Date.now() - d.getTime()) / (1000 * 60) < 3.5;
+                } catch {
+                  return false;
+                }
+              });
+              const standbySprinters = activeSprinters.filter(
+                (s) => !liveSprinters.some((l) => l.karyawanNama === s.karyawanNama)
+              );
 
               return (
                 <>
@@ -2003,12 +2086,18 @@ export function SprinterApp() {
                             <h2 className="text-base font-bold text-slate-900 dark:text-white leading-none">
                               Radar Sprinter
                             </h2>
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-                              {activeSprinters.length} Online
+                              <span>
+                                {activeSprinters.length} Sprinter Aktif
+                                {activeSprinters.length > 0 &&
+                                  ` (${liveSprinters.length} Live, ${standbySprinters.length} Standby)`}
+                              </span>
                             </span>
                           </div>
-                          <p className="text-[11px] text-slate-500 mt-0.5">Pantauan posisi GPS live dari handphone sprinter</p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            Pantauan posisi GPS live dan standby dari handphone sprinter
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5">
@@ -2016,7 +2105,7 @@ export function SprinterApp() {
                           type="button"
                           onClick={handleClearRadarGps}
                           className="px-2.5 py-1.5 flex items-center gap-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 transition border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-bold cursor-pointer active:scale-95"
-                          title="Bersihkan semua data GPS lama/offline di database"
+                          title="Bersihkan semua data GPS di database"
                         >
                           <i className="bi bi-trash3 text-xs"></i>
                           <span className="hidden sm:inline">Reset Radar</span>
@@ -2055,30 +2144,37 @@ export function SprinterApp() {
                                   : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
                               }`}
                             >
-                              Semua
+                              Semua ({activeSprinters.length})
                             </button>
-                            {activeSprinters.map((s) => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                onClick={() =>
-                                  setSelectedSprinterOnMap(
-                                    selectedSprinterOnMap === s.karyawanNama ? undefined : s.karyawanNama
-                                  )
-                                }
-                                className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
-                                  selectedSprinterOnMap === s.karyawanNama
-                                    ? 'bg-teal-600 text-white border-teal-600'
-                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
-                                }`}
-                              >
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                <span>{s.karyawanNama}</span>
-                                <span className="text-[10px] opacity-70">
-                                  {formatTimeAgo(s.waktuUpdate)}
-                                </span>
-                              </button>
-                            ))}
+                            {activeSprinters.map((s) => {
+                              const isLive = liveSprinters.some((l) => l.karyawanNama === s.karyawanNama);
+                              return (
+                                <button
+                                  key={s.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setSelectedSprinterOnMap(
+                                      selectedSprinterOnMap === s.karyawanNama ? undefined : s.karyawanNama
+                                    )
+                                  }
+                                  className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer ${
+                                    selectedSprinterOnMap === s.karyawanNama
+                                      ? 'bg-teal-600 text-white border-teal-600'
+                                      : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-500'
+                                  }`}
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isLive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                                    }`}
+                                  ></span>
+                                  <span>{s.karyawanNama}</span>
+                                  <span className="text-[10px] opacity-75">
+                                    {isLive ? 'Live' : 'Standby'}
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </>
                         )}
                       </div>
@@ -2091,56 +2187,82 @@ export function SprinterApp() {
                       <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                         Detail Lokasi Sprinter Aktif
                       </h3>
-                      {activeSprinters.map((s) => (
-                        <div
-                          key={s.id}
-                          onClick={() => setSelectedSprinterOnMap(s.karyawanNama)}
-                          className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                            selectedSprinterOnMap === s.karyawanNama
-                              ? 'bg-teal-50 dark:bg-teal-950/30 border-teal-300 dark:border-teal-700 shadow-sm'
-                              : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/80 hover:border-teal-400'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm">
-                                <i className="bi bi-person-walking"></i>
-                              </div>
-                              <div>
-                                <div className="font-bold text-sm text-slate-800 dark:text-white">{s.karyawanNama}</div>
-                                <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                                  <i className="bi bi-clock text-[10px]"></i>
-                                  <span>Update {formatTimeAgo(s.waktuUpdate)}</span>
-                                  {s.accuracy && (
-                                    <>
-                                      <span className="text-slate-300 dark:text-slate-600">&bull;</span>
-                                      <span>±{Math.round(s.accuracy)}m</span>
-                                    </>
-                                  )}
-                                  {s.speed != null && s.speed > 0 && (
-                                    <>
-                                      <span className="text-slate-300 dark:text-slate-600">&bull;</span>
-                                      <span>{Math.round(s.speed * 3.6)} km/h</span>
-                                    </>
-                                  )}
+                      {activeSprinters.map((s) => {
+                        const isLive = liveSprinters.some((l) => l.karyawanNama === s.karyawanNama);
+                        return (
+                          <div
+                            key={s.id}
+                            onClick={() => setSelectedSprinterOnMap(s.karyawanNama)}
+                            className={`p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                              selectedSprinterOnMap === s.karyawanNama
+                                ? 'bg-teal-50 dark:bg-teal-950/30 border-teal-300 dark:border-teal-700 shadow-sm'
+                                : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800/80 hover:border-teal-400'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div
+                                  className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
+                                    isLive
+                                      ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400'
+                                      : 'bg-amber-100 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400'
+                                  }`}
+                                >
+                                  <i className="bi bi-person-walking"></i>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-sm text-slate-800 dark:text-white">
+                                      {s.karyawanNama}
+                                    </span>
+                                    <span
+                                      className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                                        isLive
+                                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300'
+                                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300'
+                                      }`}
+                                    >
+                                      {isLive ? 'Live Bergerak' : 'Standby / Posisi Terakhir'}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
+                                    <i className="bi bi-clock text-[10px]"></i>
+                                    <span>Update: {formatTimeAgo(s.waktuUpdate)}</span>
+                                    {s.accuracy && (
+                                      <>
+                                        <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                                        <span>±{Math.round(s.accuracy)}m</span>
+                                      </>
+                                    )}
+                                    {s.speed != null && s.speed > 0 && (
+                                      <>
+                                        <span className="text-slate-300 dark:text-slate-600">&bull;</span>
+                                        <span>{Math.round(s.speed * 3.6)} km/h</span>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                              <a
-                                href={`https://www.google.com/maps?q=${s.latitude},${s.longitude}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="px-2.5 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-bold hover:bg-teal-700 transition flex items-center gap-1"
-                              >
-                                <i className="bi bi-geo-alt-fill"></i> Maps
-                              </a>
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    isLive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                                  }`}
+                                ></span>
+                                <a
+                                  href={`https://www.google.com/maps?q=${s.latitude},${s.longitude}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="px-2.5 py-1 rounded-lg bg-teal-600 text-white text-[11px] font-bold hover:bg-teal-700 transition flex items-center gap-1"
+                                >
+                                  <i className="bi bi-geo-alt-fill"></i> Maps
+                                </a>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 

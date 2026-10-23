@@ -156,7 +156,17 @@ export function SprinterLiveMap({
       const onGoingTasks = sprinterTasks.filter((t) => t.Status === 'Dalam Perjalanan');
       const pendingTasks = sprinterTasks.filter((t) => t.Status === 'Pending');
 
-      const isLive = loc.isActive !== false;
+      // Evaluasi sinyal: Live Bergerak (< 3.5 menit) vs Standby / HP Sleep (>= 3.5 menit)
+      const isLiveMoving = (() => {
+        if (loc.isActive === false) return false;
+        if (!loc.waktuUpdate) return false;
+        try {
+          const d = new Date(loc.waktuUpdate.replace(' ', 'T'));
+          return (Date.now() - d.getTime()) / (1000 * 60) < 3.5;
+        } catch {
+          return false;
+        }
+      })();
 
       // Custom marker perfectly anchored at [0, 0] so it NEVER shifts or moves when zooming!
       const customIcon = L.divIcon({
@@ -178,7 +188,15 @@ export function SprinterLiveMap({
           ">
             <!-- Sprinter Name Tag -->
             <div style="
-              background: ${isLive ? (isSelected ? '#0f766e' : '#0d9488') : '#64748b'};
+              background: ${
+                isLiveMoving
+                  ? isSelected
+                    ? '#0f766e'
+                    : '#0d9488'
+                  : isSelected
+                  ? '#b45309'
+                  : '#d97706'
+              };
               color: white;
               font-weight: 700;
               font-size: 11px;
@@ -193,9 +211,14 @@ export function SprinterLiveMap({
               gap: 4px;
             ">
               <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: ${
-                isLive ? '#4ade80' : '#cbd5e1'
+                isLiveMoving ? '#4ade80' : '#fde047'
               };"></span>
               <span>${loc.karyawanNama}</span>
+              ${
+                !isLiveMoving
+                  ? `<span style="background: rgba(0,0,0,0.25); font-size: 9px; padding: 1px 4px; border-radius: 4px;">Standby</span>`
+                  : ''
+              }
               ${
                 onGoingTasks.length > 0
                   ? `<span style="background: rgba(0,0,0,0.25); font-size: 9px; padding: 1px 4px; border-radius: 4px;">${onGoingTasks.length} Tgs</span>`
@@ -206,7 +229,7 @@ export function SprinterLiveMap({
             <!-- Pulsing Pin Circle -->
             <div style="position: relative; width: 34px; height: 34px;">
               ${
-                isLive
+                isLiveMoving
                   ? `<div style="
                       position: absolute;
                       inset: -4px;
@@ -220,8 +243,16 @@ export function SprinterLiveMap({
                 width: 34px;
                 height: 34px;
                 border-radius: 50%;
-                background: ${isLive ? (isSelected ? '#042f2e' : '#0f766e') : '#475569'};
-                border: 3px solid ${isSelected ? '#2dd4bf' : 'white'};
+                background: ${
+                  isLiveMoving
+                    ? isSelected
+                      ? '#042f2e'
+                      : '#0f766e'
+                    : isSelected
+                    ? '#78350f'
+                    : '#b45309'
+                };
+                border: 3px solid ${isSelected ? '#facc15' : 'white'};
                 box-shadow: 0 4px 12px rgba(0,0,0,0.35);
                 display: flex;
                 align-items: center;
@@ -239,7 +270,15 @@ export function SprinterLiveMap({
               height: 0;
               border-left: 6px solid transparent;
               border-right: 6px solid transparent;
-              border-top: 8px solid ${isLive ? (isSelected ? '#042f2e' : '#0f766e') : '#475569'};
+              border-top: 8px solid ${
+                isLiveMoving
+                  ? isSelected
+                    ? '#042f2e'
+                    : '#0f766e'
+                  : isSelected
+                  ? '#78350f'
+                  : '#b45309'
+              };
               margin-top: -2px;
             "></div>
             <!-- Titik tumpu penanda target -->
@@ -260,16 +299,30 @@ export function SprinterLiveMap({
         <div style="font-family: system-ui, -apple-system, sans-serif; min-width: 210px; padding: 2px;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 8px;">
             <strong style="font-size: 14px; color: #0f172a;">${loc.karyawanNama}</strong>
-            <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 9999px; background: ${
-              isLive ? '#dcfce7; color: #15803d;' : '#f1f5f9; color: #64748b;'
+            <span style="font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 9999px; background: ${
+              isLiveMoving ? '#dcfce7; color: #15803d;' : '#fef3c7; color: #b45309;'
             }">
-              ${isLive ? '● Live Online' : '○ Standby'}
+              ${isLiveMoving ? '● Live Bergerak' : '◐ Standby / HP Sleep'}
             </span>
           </div>
 
+          ${
+            !isLiveMoving
+              ? `<div style="font-size: 10.5px; color: #92400e; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 5px 7px; margin-bottom: 7px; line-height: 1.4;">
+                  💤 <strong>Mode Standby:</strong> Layar HP sedang istirahat/terkunci. Posisi terakhir tetap terkoneksi di radar sampai siaran dimatikan.
+                </div>`
+              : ''
+          }
+
           <div style="font-size: 11px; color: #475569; margin-bottom: 8px; line-height: 1.7; background:#f8fafc; border-radius:6px; padding:6px; border:1px solid #e2e8f0;">
             <div><strong>Koordinat:</strong> ${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}</div>
-            <div><strong>Akurasi GPS:</strong> <span style="color:${loc.accuracy && loc.accuracy <= 20 ? '#10b981' : loc.accuracy && loc.accuracy <= 60 ? '#f59e0b' : '#ef4444'}; font-weight:700;">${accText}</span></div>
+            <div><strong>Akurasi GPS:</strong> <span style="color:${
+              loc.accuracy && loc.accuracy <= 20
+                ? '#10b981'
+                : loc.accuracy && loc.accuracy <= 60
+                ? '#f59e0b'
+                : '#ef4444'
+            }; font-weight:700;">${accText}</span></div>
             <div><strong>Kecepatan:</strong> ${speedText}</div>
             <div><strong>Update:</strong> ${timeStr}</div>
           </div>
