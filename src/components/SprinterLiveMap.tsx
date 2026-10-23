@@ -28,46 +28,56 @@ export function SprinterLiveMap({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const accuracyLayerRef = useRef<L.LayerGroup | null>(null);
 
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current) return;
     if (mapInstanceRef.current) return;
 
-    // Invalidate size on mount & when container becomes visible
-    const resizeTimer = setTimeout(() => {
-      map.invalidateSize();
-    }, 250);
-
     // Default center fallback (Indonesia / Central)
     const defaultCenter: [number, number] = [-6.2088, 106.8456];
     const map = L.map(mapContainerRef.current, {
       center: defaultCenter,
-      zoom: 14,
+      zoom: 15,
       zoomControl: true,
       attributionControl: false,
+      // Smoother panning/zooming
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 120,
     });
 
-    // Clean OpenStreetMap tiles
+    // High-detail OSM tile layer with maxZoom 20
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+      maxZoom: 20,
+      maxNativeZoom: 19,
       attribution: '&copy; OpenStreetMap contributors',
+      // Keep tile in memory for smoother pan
+      keepBuffer: 4,
     }).addTo(map);
 
     const markersLayer = L.layerGroup().addTo(map);
+    const accuracyLayer = L.layerGroup().addTo(map);
     markersLayerRef.current = markersLayer;
+    accuracyLayerRef.current = accuracyLayer;
     mapInstanceRef.current = map;
+
+    // Invalidate size after mount
+    const resizeTimer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
 
     // Try centering on user's current device position if no locations yet
     if (navigator.geolocation && locations.length === 0) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           if (mapInstanceRef.current && locations.length === 0) {
-            mapInstanceRef.current.setView([pos.coords.latitude, pos.coords.longitude], 15);
+            mapInstanceRef.current.setView([pos.coords.latitude, pos.coords.longitude], 16);
           }
         },
         () => {},
-        { timeout: 5000, enableHighAccuracy: false }
+        { timeout: 5000, enableHighAccuracy: true }
       );
     }
 
@@ -92,9 +102,11 @@ export function SprinterLiveMap({
   useEffect(() => {
     const map = mapInstanceRef.current;
     const layer = markersLayerRef.current;
-    if (!map || !layer) return;
+    const accLayer = accuracyLayerRef.current;
+    if (!map || !layer || !accLayer) return;
 
     layer.clearLayers();
+    accLayer.clearLayers();
 
     const activeLocations = locations.filter(
       (loc) => loc.latitude && loc.longitude && !isNaN(loc.latitude) && !isNaN(loc.longitude)
@@ -119,6 +131,20 @@ export function SprinterLiveMap({
 
       if (isSelected) {
         selectedMarkerPos = pos;
+      }
+
+      // Accuracy Circle — visualize GPS precision radius
+      if (loc.accuracy && loc.accuracy > 0) {
+        const accColor = loc.accuracy <= 20 ? '#10b981' : loc.accuracy <= 60 ? '#f59e0b' : '#ef4444';
+        L.circle(pos, {
+          radius: loc.accuracy,
+          color: accColor,
+          fillColor: accColor,
+          fillOpacity: 0.08,
+          weight: 1.5,
+          opacity: 0.5,
+          dashArray: '4 3',
+        }).addTo(accLayer);
       }
 
       // Find in-progress tasks for this sprinter
@@ -212,10 +238,13 @@ export function SprinterLiveMap({
       const marker = L.marker(pos, { icon: customIcon });
 
       const googleMapsUrl = `https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`;
+      const googleMapsNavUrl = `https://maps.google.com/maps?daddr=${loc.latitude},${loc.longitude}&dirflg=d`;
       const timeStr = loc.waktuUpdate ? loc.waktuUpdate.replace('T', ' ').substring(0, 19) : '-';
+      const accText = loc.accuracy ? `±${Math.round(loc.accuracy)}m` : '-';
+      const speedText = loc.speed != null && loc.speed > 0 ? `${Math.round(loc.speed * 3.6)} km/h` : '-';
 
       const popupContent = `
-        <div style="font-family: system-ui, -apple-system, sans-serif; min-width: 200px; padding: 2px;">
+        <div style="font-family: system-ui, -apple-system, sans-serif; min-width: 210px; padding: 2px;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-bottom: 8px;">
             <strong style="font-size: 14px; color: #0f172a;">${loc.karyawanNama}</strong>
             <span style="font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 9999px; background: ${
@@ -225,22 +254,23 @@ export function SprinterLiveMap({
             </span>
           </div>
 
-          <div style="font-size: 11px; color: #475569; margin-bottom: 6px; line-height: 1.5;">
-            <div><strong>Koordinat:</strong> ${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}</div>
-            ${loc.accuracy ? `<div><strong>Akurasi GPS:</strong> &plusmn;${Math.round(loc.accuracy)} meter</div>` : ''}
-            <div><strong>Waktu Update:</strong> ${timeStr}</div>
+          <div style="font-size: 11px; color: #475569; margin-bottom: 8px; line-height: 1.7; background:#f8fafc; border-radius:6px; padding:6px; border:1px solid #e2e8f0;">
+            <div><strong>Koordinat:</strong> ${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)}</div>
+            <div><strong>Akurasi GPS:</strong> <span style="color:${loc.accuracy && loc.accuracy <= 20 ? '#10b981' : loc.accuracy && loc.accuracy <= 60 ? '#f59e0b' : '#ef4444'}; font-weight:700;">${accText}</span></div>
+            <div><strong>Kecepatan:</strong> ${speedText}</div>
+            <div><strong>Update:</strong> ${timeStr}</div>
           </div>
 
           ${
             onGoingTasks.length > 0
               ? `
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; margin-bottom: 8px; font-size: 11px;">
+              <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 6px; margin-bottom: 8px; font-size: 11px;">
                 <div style="color: #0f766e; font-weight: 700; margin-bottom: 2px;">Sedang Berjalan (${onGoingTasks.length}):</div>
                 ${onGoingTasks
                   .slice(0, 2)
                   .map(
                     (t) =>
-                      `<div style="color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">&bull; ${t.JudulTugas} &rarr; ${t.Tujuan}</div>`
+                      `<div style="color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">• ${t.JudulTugas} → ${t.Tujuan}</div>`
                   )
                   .join('')}
               </div>`
@@ -264,13 +294,29 @@ export function SprinterLiveMap({
               font-weight: 600;
               text-decoration: none;
             ">
-              Buka Google Maps
+              📍 Lihat Posisi
+            </a>
+            <a href="${googleMapsNavUrl}" target="_blank" rel="noreferrer" style="
+              flex: 1;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              gap: 4px;
+              background: #1d4ed8;
+              color: white;
+              padding: 6px 10px;
+              border-radius: 6px;
+              font-size: 11px;
+              font-weight: 600;
+              text-decoration: none;
+            ">
+              🧭 Navigasi
             </a>
           </div>
         </div>
       `;
 
-      marker.bindPopup(popupContent);
+      marker.bindPopup(popupContent, { maxWidth: 260 });
 
       marker.on('click', () => {
         if (onSelectSprinter) {
@@ -281,16 +327,13 @@ export function SprinterLiveMap({
       marker.addTo(layer);
     });
 
-    // Smart Focus & Zoom handling
+    // Smart Focus & Zoom handling — zoom higher for better precision
     if (selectedMarkerPos) {
-      // Focus directly on the selected sprinter with close street zoom (17)
-      map.setView(selectedMarkerPos, 17, { animate: true });
+      map.setView(selectedMarkerPos, 18, { animate: true });
     } else if (bounds.length === 1) {
-      // Single active sprinter: zoom in close so the location is precise
-      map.setView(bounds[0], 16.5, { animate: true });
+      map.setView(bounds[0], 17, { animate: true });
     } else if (bounds.length > 1) {
-      // Multiple active sprinters: fit bounds with good padding, maxZoom 17
-      map.fitBounds(bounds, { padding: [45, 45], maxZoom: 17 });
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
     }
   }, [locations, tasks, selectedSprinterId, onSelectSprinter]);
 
@@ -304,17 +347,17 @@ export function SprinterLiveMap({
     if (activeLocations.length === 0) {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
-          (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 16),
+          (pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 17),
           () => map.setView([-6.2088, 106.8456], 15)
         );
       }
       return;
     }
     if (activeLocations.length === 1) {
-      map.setView([activeLocations[0].latitude, activeLocations[0].longitude], 17, { animate: true });
+      map.setView([activeLocations[0].latitude, activeLocations[0].longitude], 18, { animate: true });
     } else {
       const bounds: [number, number][] = activeLocations.map((l) => [l.latitude, l.longitude]);
-      map.fitBounds(bounds, { padding: [45, 45], maxZoom: 17 });
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
     }
   };
 
