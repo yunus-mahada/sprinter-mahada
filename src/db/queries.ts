@@ -20,13 +20,19 @@ export async function getAllData() {
         const existingUserIds = new Set(existingUsers.map((k: any) => k.id));
         const existingUserNames = new Set(existingUsers.map((k: any) => (k.nama || '').trim().toLowerCase()));
 
-        // Only include sprinter locations for karyawan that still exist in the database
-        const validSprinterLocs = (sprinterLocsRes?.data || []).filter(
-          (l: any) =>
+        // Only include sprinter locations for karyawan that still exist in the database, and deduplicate by name
+        const locMap = new Map<string, any>();
+        for (const l of (sprinterLocsRes?.data || [])) {
+          const name = (l.karyawan_nama || '').trim().toLowerCase();
+          const validUser =
             existingUserIds.has(l.karyawan_id) ||
             existingUserIds.has(l.id) ||
-            existingUserNames.has((l.karyawan_nama || '').trim().toLowerCase())
-        );
+            existingUserNames.has(name);
+          if (validUser && name && !locMap.has(name)) {
+            locMap.set(name, l);
+          }
+        }
+        const validSprinterLocs = Array.from(locMap.values());
 
         return {
           tasks: tasksRes.data.map((t: any) => ({
@@ -508,7 +514,15 @@ export async function getSprinterLocations() {
     try {
       const res = await supabase.from('sprinter_locations').select('*').order('waktu_update', { ascending: false });
       if (!res.error && res.data) {
-        return res.data.map((l: any) => ({
+        // Deduplicate by name taking the most recent update
+        const locMap = new Map<string, any>();
+        for (const l of res.data) {
+          const name = (l.karyawan_nama || '').trim().toLowerCase();
+          if (name && !locMap.has(name)) {
+            locMap.set(name, l);
+          }
+        }
+        return Array.from(locMap.values()).map((l: any) => ({
           id: l.id,
           karyawanId: l.karyawan_id,
           karyawanNama: l.karyawan_nama,
@@ -581,6 +595,13 @@ export async function upsertSprinterLocation(locData: {
         is_active: formatted.isActive,
       }).select().single();
 
+      // Delete any older duplicate rows for the same sprinter name to prevent duplicate markers
+      await supabase
+        .from('sprinter_locations')
+        .delete()
+        .eq('karyawan_nama', formatted.karyawanNama)
+        .neq('id', formatted.id);
+
       if (!error && data) {
         return data;
       }
@@ -607,6 +628,21 @@ export async function upsertSprinterLocation(locData: {
   } catch (error) {
     console.error('Failed to upsert sprinter location:', error);
     throw new Error('Failed to save sprinter location in database.', { cause: error });
+  }
+}
+
+export async function clearAllSprinterLocations() {
+  if (isSupabaseConfigured) {
+    try {
+      await supabase.from('sprinter_locations').delete().neq('id', 'dummy-prevent-empty');
+    } catch (e) {
+      console.warn('Supabase clearAllSprinterLocations failed:', e);
+    }
+  }
+  try {
+    await db.delete(sprinterLocations);
+  } catch (e) {
+    // ignore
   }
 }
 

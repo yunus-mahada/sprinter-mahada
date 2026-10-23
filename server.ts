@@ -195,6 +195,16 @@ app.post('/api/gps', optionalAuth, async (req, res) => {
   }
 });
 
+app.delete('/api/gps', optionalAuth, async (_req, res) => {
+  try {
+    await dbQueries.clearAllSprinterLocations();
+    res.json({ success: true, message: 'Semua data GPS berhasil dibersihkan' });
+  } catch (error: any) {
+    console.error('API /api/gps DELETE error:', error);
+    res.status(500).json({ error: error.message || 'Failed to clear sprinter locations' });
+  }
+});
+
 // Setup Vite middleware in dev or static files in production
 export async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';

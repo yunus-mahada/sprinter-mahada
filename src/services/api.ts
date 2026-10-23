@@ -155,3 +155,16 @@ export async function apiSaveSprinterLocation(loc: SprinterLocation): Promise<vo
     throw new Error(err.error || 'Gagal memperbarui lokasi GPS sprinter');
   }
 }
+
+export async function apiClearAllSprinterLocations(): Promise<void> {
+  const headers = await getHeaders();
+  const res = await fetch('/api/gps', {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Gagal membersihkan data GPS');
+  }
+}
+

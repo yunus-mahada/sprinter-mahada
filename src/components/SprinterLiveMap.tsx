@@ -109,7 +109,7 @@ export function SprinterLiveMap({
     accLayer.clearLayers();
 
     const activeLocations = locations.filter(
-      (loc) => loc.latitude && loc.longitude && !isNaN(loc.latitude) && !isNaN(loc.longitude)
+      (loc) => loc.isActive === true && loc.latitude && loc.longitude && !isNaN(loc.latitude) && !isNaN(loc.longitude)
     );
 
     if (activeLocations.length === 0) {

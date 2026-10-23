@@ -538,19 +538,26 @@ export function SprinterApp() {
       try {
         const userObj = data.users.find((u) => u.Nama.trim() === mySprinterIdentity.trim());
         const karyawanId = userObj ? userObj.ID : mySprinterIdentity.replace(/\s+/g, '-').toLowerCase();
-        if (currentGpsCoords) {
-          await api.apiSaveSprinterLocation({
-            id: karyawanId,
-            karyawanId,
-            karyawanNama: mySprinterIdentity,
-            latitude: currentGpsCoords.latitude,
-            longitude: currentGpsCoords.longitude,
-            accuracy: currentGpsCoords.accuracy,
-            speed: currentGpsCoords.speed,
-            waktuUpdate: new Date().toISOString(),
-            isActive: false,
-          });
-        }
+        await api.apiSaveSprinterLocation({
+          id: karyawanId,
+          karyawanId,
+          karyawanNama: mySprinterIdentity,
+          latitude: currentGpsCoords ? currentGpsCoords.latitude : 0,
+          longitude: currentGpsCoords ? currentGpsCoords.longitude : 0,
+          accuracy: currentGpsCoords?.accuracy,
+          speed: currentGpsCoords?.speed,
+          waktuUpdate: new Date().toISOString(),
+          isActive: false,
+        });
+        setData((prev) => ({
+          ...prev,
+          sprinterLocations: (prev.sprinterLocations || []).filter(
+            (l) =>
+              (l.karyawanNama || '').trim().toLowerCase() !== mySprinterIdentity.trim().toLowerCase() &&
+              l.id !== karyawanId &&
+              l.karyawanId !== karyawanId
+          ),
+        }));
       } catch (e) {
         // ignore
       }
@@ -1012,6 +1019,21 @@ export function SprinterApp() {
       showToast(`Lokasi radar ${sprinterNama} berhasil dibersihkan`);
     } catch (err: any) {
       showToast('Gagal membersihkan lokasi');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClearRadarGps = async () => {
+    if (!window.confirm('Bersihkan semua riwayat radar GPS lama/offline di database? Sprinter yang sedang aktif akan otomatis muncul kembali saat mengirim koordinat berikutnya.')) return;
+    setIsLoading(true);
+    setLoadingText('MEMBERSIHKAN RADAR...');
+    try {
+      await api.apiClearAllSprinterLocations();
+      setData((prev) => ({ ...prev, sprinterLocations: [] }));
+      showToast('Data radar GPS berhasil dibersihkan!');
+    } catch (e: any) {
+      showToast(e.message || 'Gagal membersihkan radar');
     } finally {
       setIsLoading(false);
     }
@@ -1632,24 +1654,51 @@ export function SprinterApp() {
               const existingUserIds = new Set(data.users.map((u) => u.ID));
               const existingUserNames = new Set(data.users.map((u) => (u.Nama || '').trim().toLowerCase()));
 
-              // Filter out any locations of deleted karyawan
-              const validSprinterLocations = (data.sprinterLocations || []).filter(
-                (l) =>
-                  existingUserIds.has(l.karyawanId) ||
-                  existingUserIds.has(l.id) ||
-                  existingUserNames.has((l.karyawanNama || '').trim().toLowerCase())
-              );
+              // Cek apakah sinyal GPS masih fresh (< 10 menit)
+              // Jika HP dimatikan atau keluar tanpa menonaktifkan, sinyal lama otomatis dianggap offline!
+              const isGpsRecent = (dateStr: string) => {
+                if (!dateStr) return false;
+                try {
+                  const d = new Date(dateStr.replace(' ', 'T'));
+                  const time = d.getTime();
+                  if (isNaN(time)) return false;
+                  const diffMinutes = (Date.now() - time) / (1000 * 60);
+                  return diffMinutes >= -1 && diffMinutes <= 10;
+                } catch {
+                  return false;
+                }
+              };
 
-              const activeSprinters = validSprinterLocations.filter(
-                (l) => l.isActive && l.latitude && l.longitude
-              );
+              // 1. Filter: Hanya sprinter terdaftar, isActive === true, koordinat valid, dan sinyal fresh
+              const rawActive = (data.sprinterLocations || []).filter((l) => {
+                const nameKey = (l.karyawanNama || '').trim().toLowerCase();
+                const userExists =
+                  existingUserNames.has(nameKey) ||
+                  existingUserIds.has(l.karyawanId) ||
+                  existingUserIds.has(l.id);
+                return userExists && l.isActive === true && l.latitude && l.longitude && isGpsRecent(l.waktuUpdate);
+              });
+
+              // 2. Sort terbaru di atas untuk prioritas deduplikasi
+              rawActive.sort((a, b) => (b.waktuUpdate || '').localeCompare(a.waktuUpdate || ''));
+
+              // 3. Deduplikasi ketat: 1 sprinter HANYA MUNCUL 1 KALI (ambil record paling baru)
+              const activeSprintersMap = new Map<string, SprinterLocation>();
+              for (const loc of rawActive) {
+                const key = (loc.karyawanNama || '').trim().toLowerCase();
+                if (key && !activeSprintersMap.has(key)) {
+                  activeSprintersMap.set(key, loc);
+                }
+              }
+              const activeSprinters = Array.from(activeSprintersMap.values());
+
               return (
                 <>
                   {/* === FULL-SIZE MAP (paling atas, langsung kelihatan) === */}
                   <div className="p-4 pb-2">
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800/90 shadow-sm overflow-hidden">
                       <SprinterLiveMap
-                        locations={validSprinterLocations}
+                        locations={activeSprinters}
                         tasks={data.tasks}
                         selectedSprinterId={selectedSprinterOnMap}
                         onSelectSprinter={(name) => setSelectedSprinterOnMap(name)}
@@ -1678,14 +1727,25 @@ export function SprinterApp() {
                           <p className="text-[11px] text-slate-500 mt-0.5">Pantauan posisi GPS live dari handphone sprinter</p>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => refreshData(true)}
-                        className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer active:scale-95"
-                        title="Refresh lokasi GPS"
-                      >
-                        <i className="bi bi-arrow-clockwise text-sm"></i>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleClearRadarGps}
+                          className="px-2.5 py-1.5 flex items-center gap-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/40 transition border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-bold cursor-pointer active:scale-95"
+                          title="Bersihkan semua data GPS lama/offline di database"
+                        >
+                          <i className="bi bi-trash3 text-xs"></i>
+                          <span className="hidden sm:inline">Reset Radar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => refreshData(true)}
+                          className="w-9 h-9 flex items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-pointer active:scale-95"
+                          title="Refresh lokasi GPS"
+                        >
+                          <i className="bi bi-arrow-clockwise text-sm"></i>
+                        </button>
+                      </div>
                     </div>
                   </div>
 
