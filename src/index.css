@@ -35,31 +35,117 @@
   animation: fadeIn 0.25s ease-out forwards;
 }
 
+/* =========================================================
+   DEDICATED PRINT / PDF STYLING (A4 COMPACT & PROFESSIONAL)
+   ========================================================= */
+@media screen {
+  .print-only-document {
+    display: none !important;
+  }
+}
+
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
+  /* Set standard A4 paper with professional compact margins */
+  @page {
+    size: A4 portrait;
+    margin: 12mm 14mm 12mm 14mm;
   }
 
+  html, body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-size: 9pt !important;
+    line-height: 1.35 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide screen-only UI elements completely */
   nav,
   header,
+  footer,
   button,
-  .hide-on-print {
+  .hide-on-print,
+  .app-shell-header,
+  .bottom-nav {
     display: none !important;
   }
 
-  .print-only {
-    display: block !important;
+  /* Hide main app container shadows, borders and padding in print */
+  body > div,
+  .w-full {
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
   }
 
-  @page {
-    size: A5 portrait;
-    margin: 10mm;
+  /* Show only the dedicated printable document */
+  .print-only-document {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 8.5pt !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Table rules for print */
+  .print-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 8pt !important;
+  }
+
+  .print-table th {
+    background-color: #f1f5f9 !important;
+    color: #334155 !important;
+    font-weight: 700 !important;
+    padding: 5px 7px !important;
+    border: 1px solid #cbd5e1 !important;
+    font-size: 8pt !important;
+    text-transform: uppercase !important;
+  }
+
+  .print-table td {
+    padding: 5px 7px !important;
+    border: 1px solid #e2e8f0 !important;
+    font-size: 8pt !important;
+    color: #1e293b !important;
+  }
+
+  .print-table tr:nth-child(even) td {
+    background-color: #f8fafc !important;
+  }
+
+  /* Summary cards for print */
+  .print-card {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    background: #ffffff !important;
+  }
+
+  /* Page-break avoidance */
+  .print-table tr,
+  .print-no-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   * {
-    color: #000 !important;
-    border-color: #cbd5e1 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
     box-shadow: none !important;
+    text-shadow: none !important;
   }
 }
+

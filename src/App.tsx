@@ -44,6 +44,39 @@ function getTodayDateString(): string {
   return `${y}-${m}-${day}`;
 }
 
+function getYesterdayDateString(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatIndonesianDate(dateStr: string): string {
+  if (!dateStr) return '-';
+  try {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+      const months = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+      ];
+      const dateObj = new Date(y, m, d);
+      const dayName = days[dateObj.getDay()] || '';
+      const monthName = months[m] || '';
+      return `${dayName}, ${d} ${monthName} ${y}`;
+    }
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+}
+
 function getIndonesianDateHeader(): string {
   const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
   const months = [
@@ -183,6 +216,8 @@ export function SprinterApp() {
   const [reportKaryawan, setReportKaryawan] = useState<string>('ALL');
   const [rekapKaryawan, setRekapKaryawan] = useState<string>('');
   const [uangCashInput, setUangCashInput] = useState<string>('');
+  const [showPrintPreview, setShowPrintPreview] = useState<boolean>(false);
+  const [reportSearchQuery, setReportSearchQuery] = useState<string>('');
 
   // Vendor search
   const [vendorSearch, setVendorSearch] = useState('');
@@ -1112,6 +1147,21 @@ export function SprinterApp() {
     });
   }, [data.tasks, reportKaryawan, reportDate]);
 
+  // Tasks shown in UI table with optional search filter
+  const reportDisplayTasks = useMemo(() => {
+    if (!reportSearchQuery.trim()) return reportFilteredTasks;
+    const q = reportSearchQuery.toLowerCase().trim();
+    return reportFilteredTasks.filter((t) => {
+      return (
+        (t.JudulTugas || '').toLowerCase().includes(q) ||
+        (t.KeteranganBiaya || '').toLowerCase().includes(q) ||
+        (t.Invoice || '').toLowerCase().includes(q) ||
+        (t.Kategori || '').toLowerCase().includes(q) ||
+        (t.Karyawan || '').toLowerCase().includes(q)
+      );
+    });
+  }, [reportFilteredTasks, reportSearchQuery]);
+
   const reportTotalPengeluaran = useMemo(() => {
     return reportFilteredTasks.reduce((acc, curr) => acc + (Number(curr.Biaya) || 0), 0);
   }, [reportFilteredTasks]);
@@ -1121,9 +1171,243 @@ export function SprinterApp() {
 
   const handlePrintPDF = () => {
     handleSaveRecap();
+    const prevTitle = document.title;
+    const cleanDate = reportDate || getTodayDateString();
+    const cleanPic = (rekapKaryawan || 'Semua').replace(/[^a-zA-Z0-9]/g, '_');
+    document.title = `Rekap_Kas_Sprinter_${cleanDate}_${cleanPic}`;
+
     setTimeout(() => {
       window.print();
-    }, 300);
+      setTimeout(() => {
+        document.title = prevTitle;
+      }, 1000);
+    }, 250);
+  };
+
+  // Render professional A4 printable document (shared between print media and preview modal)
+  const renderPrintableDocument = (isModalPreview = false) => {
+    const formattedDate = formatIndonesianDate(reportDate);
+    const picText = rekapKaryawan || '(Belum Dipilih)';
+
+    return (
+      <div
+        id="rekap-printable-area"
+        className={`bg-white text-slate-900 font-sans print-document-container ${
+          isModalPreview
+            ? 'w-full max-w-[820px] mx-auto p-6 sm:p-8 rounded-xl shadow-2xl border border-slate-200 text-xs text-left'
+            : 'print-only-document p-0 text-left'
+        }`}
+      >
+        {/* KOP / HEADER LAPORAN RESMI */}
+        <div className="border-b-2 border-slate-900 pb-3 mb-4">
+          <div className="flex justify-between items-start gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="font-black text-slate-900 tracking-tight text-base sm:text-lg uppercase">
+                  SPRINTER MAHADA
+                </span>
+                <span className="text-[9px] bg-slate-900 text-white font-bold px-2 py-0.5 rounded tracking-wider uppercase">
+                  Logistik &amp; Operasional
+                </span>
+              </div>
+              <h1 className="text-sm sm:text-base font-extrabold text-slate-900 uppercase tracking-tight">
+                Laporan Rekapitulasi Kas &amp; Pengeluaran Harian
+              </h1>
+              <p className="text-[11px] text-slate-500 font-medium">
+                Divisi Operasional &bull; PT Mahada Adikara Kreasi
+              </p>
+            </div>
+
+            {/* KOTAK METADATA LAPORAN */}
+            <div className="text-right text-[11px] bg-slate-50 border border-slate-200 rounded-lg p-2.5 min-w-[210px] shrink-0">
+              <div className="flex justify-between gap-2 py-0.5 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Tanggal Rekap:</span>
+                <span className="font-bold text-slate-800">{formattedDate}</span>
+              </div>
+              <div className="flex justify-between gap-2 py-0.5 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Petugas Rekap:</span>
+                <span className="font-bold text-slate-800 truncate max-w-[130px]">{picText}</span>
+              </div>
+              <div className="flex justify-between gap-2 py-0.5 border-b border-slate-200/60">
+                <span className="text-slate-500 font-medium">Filter Karyawan:</span>
+                <span className="font-bold text-slate-800 truncate max-w-[130px]">
+                  {reportKaryawan === 'ALL' ? 'Semua Karyawan' : reportKaryawan.split(' ')[0]}
+                </span>
+              </div>
+              <div className="flex justify-between gap-2 py-0.5 text-[10px] text-slate-400">
+                <span>Waktu Cetak:</span>
+                <span>{getJakartaTimeString().substring(11, 16)} WIB</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3 KOTAK RINGKASAN FINANSIAL */}
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="border border-slate-300 rounded-lg p-2.5 bg-slate-50/70">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+              1. Modal Awal / Cash
+            </div>
+            <div className="text-sm sm:text-base font-mono font-black text-slate-900">
+              {formatRupiah(modalCashNumber)}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">Kas operasional awal</div>
+          </div>
+
+          <div className="border border-slate-300 rounded-lg p-2.5 bg-slate-50/70">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+              2. Total Pengeluaran
+            </div>
+            <div className="text-sm sm:text-base font-mono font-black text-rose-600">
+              {formatRupiah(reportTotalPengeluaran)}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              {reportFilteredTasks.length} transaksi selesai
+            </div>
+          </div>
+
+          <div
+            className={`border rounded-lg p-2.5 ${
+              sisaUang >= 0
+                ? 'border-emerald-300 bg-emerald-50/50 text-emerald-950'
+                : 'border-rose-300 bg-rose-50/50 text-rose-950'
+            }`}
+          >
+            <div className="text-[10px] font-bold uppercase tracking-wider opacity-85 mb-0.5 flex justify-between items-center">
+              <span>3. Sisa Saldo Kas</span>
+              <span
+                className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${
+                  sisaUang >= 0 ? 'bg-emerald-200 text-emerald-900' : 'bg-rose-200 text-rose-900'
+                }`}
+              >
+                {sisaUang >= 0 ? 'Surplus / Sisa' : 'Defisit'}
+              </span>
+            </div>
+            <div
+              className={`text-sm sm:text-base font-mono font-black ${
+                sisaUang >= 0 ? 'text-emerald-700' : 'text-rose-700'
+              }`}
+            >
+              {formatRupiah(sisaUang)}
+            </div>
+            <div className="text-[10px] opacity-75 mt-0.5">Modal dikurangi pengeluaran</div>
+          </div>
+        </div>
+
+        {/* TABEL RINCIAN TRANSAKSI PENGELUARAN */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-1.5 px-0.5">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-slate-700">
+              Rincian Biaya Transaksi Operasional
+            </span>
+            <span className="text-[10px] text-slate-500">
+              Total {reportFilteredTasks.length} item pengeluaran
+            </span>
+          </div>
+
+          <table className="w-full border-collapse border border-slate-300 print-table text-[11px]">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px]">
+                <th className="border border-slate-300 p-1.5 text-center w-8">No</th>
+                <th className="border border-slate-300 p-1.5 text-left w-24">No. Invoice</th>
+                <th className="border border-slate-300 p-1.5 text-left">Kegiatan &amp; Keterangan Biaya</th>
+                <th className="border border-slate-300 p-1.5 text-center w-24">Kategori</th>
+                <th className="border border-slate-300 p-1.5 text-left w-32">Sprinter / Pelaksana</th>
+                <th className="border border-slate-300 p-1.5 text-right w-28">Biaya (Rp)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reportFilteredTasks.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="border border-slate-300 p-4 text-center text-slate-400 italic">
+                    Tidak ada transaksi pengeluaran (biaya &gt; 0) pada tanggal dan filter ini.
+                  </td>
+                </tr>
+              ) : (
+                reportFilteredTasks.map((t, idx) => (
+                  <tr key={t.ID || idx} className="hover:bg-slate-50/50">
+                    <td className="border border-slate-300 p-1.5 text-center text-slate-500 font-mono text-[10px]">
+                      {idx + 1}
+                    </td>
+                    <td className="border border-slate-300 p-1.5 font-mono text-[10px] text-slate-700 font-bold whitespace-nowrap">
+                      {t.Invoice || '-'}
+                    </td>
+                    <td className="border border-slate-300 p-1.5">
+                      <div className="font-bold text-slate-900 leading-snug">{t.JudulTugas}</div>
+                      {t.KeteranganBiaya && (
+                        <div className="text-[10px] text-slate-500 mt-0.5 leading-tight italic">
+                          Ket: {t.KeteranganBiaya}
+                        </div>
+                      )}
+                    </td>
+                    <td className="border border-slate-300 p-1.5 text-center text-[10px] text-slate-600">
+                      {t.Kategori || '-'}
+                    </td>
+                    <td className="border border-slate-300 p-1.5 text-slate-700 text-[10px]">
+                      {t.Karyawan || '-'}
+                    </td>
+                    <td className="border border-slate-300 p-1.5 text-right font-mono font-bold text-slate-900 text-[11px] whitespace-nowrap">
+                      {formatRupiah(t.Biaya)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-100 font-bold border-t-2 border-slate-400">
+                <td colSpan={5} className="border border-slate-300 p-1.5 text-right uppercase text-[10px] tracking-wider text-slate-700">
+                  Total Pengeluaran Operasional :
+                </td>
+                <td className="border border-slate-300 p-1.5 text-right font-mono font-black text-rose-700 text-[11px] whitespace-nowrap">
+                  {formatRupiah(reportTotalPengeluaran)}
+                </td>
+              </tr>
+              <tr className="bg-slate-50 font-bold">
+                <td colSpan={5} className="border border-slate-300 p-1.5 text-right uppercase text-[10px] tracking-wider text-slate-700">
+                  Sisa Saldo Kas (Kembalian) :
+                </td>
+                <td
+                  className={`border border-slate-300 p-1.5 text-right font-mono font-black text-[11px] whitespace-nowrap ${
+                    sisaUang >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                  }`}
+                >
+                  {formatRupiah(sisaUang)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* KOLOM PENGESAHAN / TANDA TANGAN */}
+        <div className="pt-2 print-no-break border-t border-slate-200">
+          <div className="grid grid-cols-2 gap-8 text-center text-[11px]">
+            <div>
+              <p className="text-slate-500 font-medium mb-1">Diserahkan / Dibuat Oleh:</p>
+              <p className="text-[10px] text-slate-400 font-semibold mb-10">Sprinter / Petugas Kasir</p>
+              <div className="w-48 mx-auto border-b border-slate-400 pb-0.5">
+                <span className="font-bold text-slate-800">{rekapKaryawan || '( ........................................ )'}</span>
+              </div>
+              <p className="text-[9px] text-slate-400 mt-0.5">Tanda Tangan &amp; Nama Terang</p>
+            </div>
+
+            <div>
+              <p className="text-slate-500 font-medium mb-1">Diterima &amp; Disetujui Oleh:</p>
+              <p className="text-[10px] text-slate-400 font-semibold mb-10">Finance / Operational Head</p>
+              <div className="w-48 mx-auto border-b border-slate-400 pb-0.5">
+                <span className="font-bold text-slate-800">( ........................................ )</span>
+              </div>
+              <p className="text-[9px] text-slate-400 mt-0.5">Admin / Pimpinan Mahada</p>
+            </div>
+          </div>
+        </div>
+
+        {/* FOOTER CATATAN KECIL */}
+        <div className="mt-4 pt-2 border-t border-slate-200/60 text-[9px] text-slate-400 flex justify-between items-center">
+          <span>* Harap melampirkan bukti fisik/nota/struk pembelian untuk arsip administrasi.</span>
+          <span>Sistem Operasional Sprinter Mahada &bull; Dokumen A4 Standar</span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -1151,7 +1435,7 @@ export function SprinterApp() {
       )}
 
       {/* MAIN CONTAINER */}
-      <div className="w-full md:max-w-2xl lg:max-w-3xl mx-auto bg-slate-50 dark:bg-[#0f172a] min-h-screen relative pb-28 shadow-2xl overflow-x-hidden border-x border-slate-200 dark:border-slate-800 z-10">
+      <div className="w-full md:max-w-2xl lg:max-w-3xl mx-auto bg-slate-50 dark:bg-[#0f172a] min-h-screen relative pb-28 shadow-2xl overflow-x-hidden border-x border-slate-200 dark:border-slate-800 z-10 hide-on-print">
         
         {/* HEADER */}
         <header className="bg-slate-900 text-white px-4 md:px-6 py-3.5 sticky top-0 z-30 border-b border-slate-800 shadow-sm backdrop-blur-md bg-slate-900/95">
@@ -2271,64 +2555,138 @@ export function SprinterApp() {
 
         {/* VIEW 4: LAPORAN & REKAP KAS */}
         {activeTab === 'report' && (
-          <div className="animate-fade-in p-5">
-            <h2 className="text-2xl font-black mb-6 text-slate-800 dark:text-white flex items-center gap-2">
-              <i className="bi bi-pie-chart-fill text-teal-500"></i> Laporan & Rekap Kas
-            </h2>
+          <div className="animate-fade-in p-4 sm:p-5">
+            {/* HEADER LAPORAN */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+              <div>
+                <div className="flex items-center gap-2.5 mb-1">
+                  <span className="w-9 h-9 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-lg shadow-xs">
+                    <i className="bi bi-pie-chart-fill"></i>
+                  </span>
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white tracking-tight leading-tight">
+                      Laporan &amp; Rekap Kas
+                    </h2>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Pantau arus kas harian, rincian pengeluaran, dan cetak dokumen resmi A4.
+                </p>
+              </div>
 
-            {/* FILTER KARYAWAN & TANGGAL */}
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 mb-5 flex gap-3 items-end hide-on-print">
-              <div className="flex-1">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Karyawan</label>
-                <select
-                  value={reportKaryawan}
-                  onChange={(e) => setReportKaryawan(e.target.value)}
-                  className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
+              {/* QUICK ACTION BUTTONS */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintPreview(true)}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer active:scale-95 shadow-xs"
+                  title="Lihat Pratinjau Dokumen PDF"
                 >
-                  <option value="ALL">Semua Karyawan</option>
-                  {data.users.map((u) => (
-                    <option key={u.ID} value={`${u.Nama} (${u.Posisi})`}>
-                      {u.Nama} ({u.Posisi})
-                    </option>
-                  ))}
-                </select>
+                  <i className="bi bi-eye-fill text-teal-500"></i>
+                  <span>Pratinjau PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePrintPDF}
+                  className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md active:scale-95"
+                  title="Cetak atau Unduh Dokumen PDF"
+                >
+                  <i className="bi bi-printer-fill"></i>
+                  <span>Cetak PDF</span>
+                </button>
               </div>
-              <div className="flex-1">
-                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5">Tanggal</label>
-                <input
-                  type="date"
-                  value={reportDate}
-                  onChange={(e) => setReportDate(e.target.value)}
-                  className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm font-bold text-slate-700 dark:text-slate-300 cursor-pointer"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setReportKaryawan('ALL');
-                  setReportDate(getTodayDateString());
-                }}
-                title="Reset Filter"
-                className="h-[46px] px-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl cursor-pointer hover:bg-slate-200 transition"
-              >
-                <i className="bi bi-arrow-clockwise"></i>
-              </button>
             </div>
 
-            {/* ARUS KAS CARD */}
-            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden mb-6">
-              <div className="p-5 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center hide-on-print">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Arus Kas Operasional</span>
-                <div className="w-8 h-8 bg-teal-100 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 rounded-full flex items-center justify-center">
-                  <i className="bi bi-wallet2"></i>
+            {/* PANEL FILTER & KONTROL HARIAN */}
+            <div className="bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 mb-5 space-y-4">
+              {/* Bagian 1: Periode & Filter Karyawan */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <i className="bi bi-calendar3 text-teal-500"></i> Tanggal Laporan
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setReportDate(getTodayDateString())}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer ${
+                          reportDate === getTodayDateString()
+                            ? 'bg-teal-500 text-white font-extrabold'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                        }`}
+                      >
+                        Hari Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReportDate(getYesterdayDateString())}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition cursor-pointer ${
+                          reportDate === getYesterdayDateString()
+                            ? 'bg-teal-500 text-white font-extrabold'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                        }`}
+                      >
+                        Kemarin
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="date"
+                    value={reportDate}
+                    onChange={(e) => setReportDate(e.target.value)}
+                    className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 cursor-pointer focus:ring-2 focus:ring-teal-500/20"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <i className="bi bi-person-badge-fill text-teal-500"></i> Filter Karyawan
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportKaryawan('ALL');
+                        setReportDate(getTodayDateString());
+                      }}
+                      className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition flex items-center gap-1 cursor-pointer"
+                      title="Reset filter"
+                    >
+                      <i className="bi bi-arrow-clockwise"></i> Reset
+                    </button>
+                  </div>
+                  <select
+                    value={reportKaryawan}
+                    onChange={(e) => setReportKaryawan(e.target.value)}
+                    className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200 cursor-pointer focus:ring-2 focus:ring-teal-500/20"
+                  >
+                    <option value="ALL">Semua Karyawan (Seluruh Sprinter)</option>
+                    {data.users.map((u) => (
+                      <option key={u.ID} value={`${u.Nama} (${u.Posisi})`}>
+                        {u.Nama} ({u.Posisi})
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
-              <div className="p-5 space-y-4">
-                <div className="grid grid-cols-2 gap-4 hide-on-print mb-2">
+              {/* Bagian 2: Input Kas & PIC Rekap */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <i className="bi bi-wallet2 text-emerald-500"></i> Pengaturan Kas Operasional
+                  </span>
+                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <i className="bi bi-cloud-check-fill"></i> Tersimpan otomatis
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold mb-1.5 text-slate-500 dark:text-slate-400 uppercase">
-                      Yg Merekap
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Petugas Rekap (PIC)
                     </label>
                     <select
                       value={rekapKaryawan}
@@ -2336,146 +2694,268 @@ export function SprinterApp() {
                         setRekapKaryawan(e.target.value);
                         handleSaveRecap(undefined, e.target.value);
                       }}
-                      className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 text-sm cursor-pointer"
+                      className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 font-bold text-slate-700 dark:text-slate-200 text-xs sm:text-sm cursor-pointer"
                     >
-                      <option value="">-- Pilih Karyawan --</option>
+                      <option value="">-- Pilih Petugas Rekap --</option>
                       {data.users.map((u) => (
                         <option key={u.ID} value={`${u.Nama} (${u.Posisi})`}>
                           {u.Nama} ({u.Posisi})
                         </option>
                       ))}
                     </select>
+                    <p className="text-[10px] text-slate-400 mt-1">Dicantumkan pada tanda tangan laporan PDF</p>
                   </div>
+
                   <div>
-                    <label className="block text-xs font-bold mb-1.5 text-slate-500 dark:text-slate-400 uppercase">
-                      Cash Hari Ini (Rp)
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                      Modal Kas Awal Harian (Rp)
                     </label>
-                    <input
-                      type="number"
-                      value={uangCashInput}
-                      onChange={(e) => setUangCashInput(e.target.value)}
-                      onBlur={() => handleSaveRecap()}
-                      placeholder="0"
-                      className="w-full p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 font-mono font-black text-teal-700 dark:text-teal-400 text-base"
-                    />
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                        Rp
+                      </span>
+                      <input
+                        type="number"
+                        value={uangCashInput}
+                        onChange={(e) => setUangCashInput(e.target.value)}
+                        onBlur={() => handleSaveRecap()}
+                        placeholder="0"
+                        className="w-full pl-9 pr-3 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 font-mono font-black text-slate-800 dark:text-white text-sm focus:ring-2 focus:ring-teal-500/20"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">Uang tunai awal diserahkan ke sprinter</p>
                   </div>
                 </div>
+              </div>
+            </div>
 
-                {/* Print Title Header */}
-                <div className="print-only mb-4 hidden">
-                  <h2 className="text-xl font-black mb-1">SPRINTER MAHADA - LAPORAN KAS OPERASIONAL</h2>
-                  <p className="text-xs font-bold text-slate-600">
-                    Tanggal: {reportDate} | PIC Rekap: {rekapKaryawan || '-'}
-                  </p>
-                </div>
-
-                <div className="flex justify-between items-center border-b border-dashed border-slate-200 dark:border-slate-800 pb-3 pt-1">
-                  <span className="text-slate-500 dark:text-slate-400 font-medium text-sm">Modal Awal / Cash</span>
-                  <span className="font-black text-slate-700 dark:text-slate-200 text-lg">
+            {/* 3 KARTU RINGKASAN FINANSIAL */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+              {/* Modal Kas Awal */}
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                    Modal Kas Awal
+                  </span>
+                  <span className="text-lg sm:text-xl font-mono font-black text-slate-800 dark:text-white">
                     {formatRupiah(modalCashNumber)}
                   </span>
+                  <span className="block text-[10px] text-slate-400 mt-0.5">
+                    Kas operasional hari ini
+                  </span>
                 </div>
+                <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 flex items-center justify-center text-lg shrink-0">
+                  <i className="bi bi-cash-stack"></i>
+                </div>
+              </div>
 
-                <div className="flex justify-between items-center border-b border-dashed border-slate-200 dark:border-slate-800 pb-3 pt-1">
-                  <span className="text-slate-500 dark:text-slate-400 font-medium text-sm">Total Pengeluaran</span>
-                  <span className="font-black text-rose-500 text-lg">
+              {/* Total Pengeluaran */}
+              <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">
+                    Total Pengeluaran
+                  </span>
+                  <span className="text-lg sm:text-xl font-mono font-black text-rose-500">
                     {formatRupiah(reportTotalPengeluaran)}
                   </span>
+                  <span className="block text-[10px] text-slate-400 mt-0.5">
+                    {reportFilteredTasks.length} transaksi selesai
+                  </span>
                 </div>
+                <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-900/30 text-rose-500 flex items-center justify-center text-lg shrink-0">
+                  <i className="bi bi-arrow-up-right-circle"></i>
+                </div>
+              </div>
 
-                <div className="flex justify-between items-center pt-2 pb-2 px-3 bg-amber-50 dark:bg-amber-900/20 rounded-xl mt-2 border border-amber-100 dark:border-amber-900/30">
-                  <span className="text-amber-800 dark:text-amber-400 font-bold text-sm">Sisa Uang (Kembalian)</span>
-                  <span className="font-black text-2xl text-amber-600 dark:text-amber-400">
+              {/* Sisa Saldo Kas */}
+              <div className={`p-4 rounded-2xl shadow-sm border flex items-center justify-between ${
+                sisaUang >= 0
+                  ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/40'
+                  : 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40'
+              }`}>
+                <div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                      Sisa Saldo Kas
+                    </span>
+                    <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded ${
+                      sisaUang >= 0
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300'
+                        : 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-300'
+                    }`}>
+                      {sisaUang >= 0 ? 'Surplus' : 'Defisit'}
+                    </span>
+                  </div>
+                  <span className={`text-lg sm:text-xl font-mono font-black ${
+                    sisaUang >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                  }`}>
                     {formatRupiah(sisaUang)}
                   </span>
+                  <span className="block text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {sisaUang >= 0 ? 'Kembalian kas tersedia' : 'Pengeluaran melebihi kas'}
+                  </span>
+                </div>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${
+                  sisaUang >= 0
+                    ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-300'
+                    : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300'
+                }`}>
+                  <i className="bi bi-wallet2"></i>
                 </div>
               </div>
             </div>
 
             {/* RINCIAN TABEL BIAYA */}
-            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden mb-6">
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                <span className="font-bold text-slate-700 dark:text-slate-300 text-sm">
-                  Rincian Kegiatan (Biaya &gt; 0)
-                </span>
-                <span className="text-xs font-bold px-2.5 py-1 bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 rounded-full">
-                  {reportFilteredTasks.length} Transaksi
-                </span>
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 overflow-hidden mb-6">
+              {/* Header tabel & quick search */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 text-sm">
+                    Rincian Transaksi Pengeluaran
+                  </span>
+                  <span className="text-xs font-bold px-2 py-0.5 bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 rounded-full">
+                    {reportFilteredTasks.length} Transaksi
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <i className="bi bi-search absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
+                    <input
+                      type="text"
+                      placeholder="Cari transaksi..."
+                      value={reportSearchQuery}
+                      onChange={(e) => setReportSearchQuery(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 w-44 sm:w-56 focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                    />
+                  </div>
+                </div>
               </div>
+
+              {/* Table Container */}
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-100/60 dark:bg-slate-800 text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <thead className="bg-slate-100/70 dark:bg-slate-800/80 text-[10px] text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     <tr>
-                      <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700">No. Inv</th>
-                      <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700">Kegiatan</th>
+                      <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700 w-10 text-center">No</th>
+                      <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700 w-28">No. Inv</th>
+                      <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700">Kegiatan &amp; Catatan</th>
                       <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700">Kategori</th>
+                      <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700">Pelaksana</th>
                       <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700 text-right">Biaya (Rp)</th>
-                      <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700 hide-on-print w-10"></th>
+                      <th className="p-3 font-bold border-b border-slate-200 dark:border-slate-700 w-12 text-center">Aksi</th>
                     </tr>
                   </thead>
-                  <tbody className="text-sm divide-y divide-slate-100 dark:divide-slate-800">
-                    {reportFilteredTasks.length === 0 ? (
+                  <tbody className="text-xs divide-y divide-slate-100 dark:divide-slate-800">
+                    {reportDisplayTasks.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="p-6 text-center text-xs text-slate-400">
-                          Tidak ada transaksi biaya pada tanggal ini.
+                        <td colSpan={7} className="p-8 text-center text-xs text-slate-400">
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <i className="bi bi-receipt-cutoff text-3xl text-slate-300 dark:text-slate-600"></i>
+                            <span className="font-medium">
+                              {reportFilteredTasks.length === 0
+                                ? 'Tidak ada transaksi dengan pengeluaran (biaya > 0) pada tanggal ini.'
+                                : 'Tidak ditemukan transaksi yang cocok dengan kata kunci pencarian.'}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     ) : (
-                      reportFilteredTasks.map((t) => (
-                        <tr key={t.ID} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                          <td className="p-3 whitespace-nowrap text-xs text-slate-500 dark:text-slate-400 font-mono">
+                      reportDisplayTasks.map((t, idx) => (
+                        <tr key={t.ID} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                          <td className="p-3 text-center text-slate-400 font-mono text-[11px]">
+                            {idx + 1}
+                          </td>
+                          <td className="p-3 whitespace-nowrap font-mono text-[11px] font-bold text-slate-600 dark:text-slate-300">
                             {t.Invoice || '-'}
                           </td>
-                          <td className="p-3 text-slate-800 dark:text-slate-200 font-medium">
-                            {t.JudulTugas}
+                          <td className="p-3 text-slate-800 dark:text-slate-200">
+                            <span className="font-bold block leading-snug">{t.JudulTugas}</span>
                             {t.KeteranganBiaya && (
-                              <span className="block text-xs text-slate-400">{t.KeteranganBiaya}</span>
+                              <span className="block text-[11px] text-slate-400 dark:text-slate-400 mt-0.5 italic">
+                                Ket: {t.KeteranganBiaya}
+                              </span>
                             )}
                           </td>
-                          <td className="p-3 text-slate-600 dark:text-slate-400 text-xs">
-                            <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
                               {t.Kategori}
                             </span>
                           </td>
-                          <td className="p-3 whitespace-nowrap text-right font-mono font-bold text-slate-800 dark:text-slate-200">
+                          <td className="p-3 text-slate-600 dark:text-slate-400 whitespace-nowrap text-[11px]">
+                            {t.Karyawan || '-'}
+                          </td>
+                          <td className="p-3 whitespace-nowrap text-right font-mono font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm">
                             {formatRupiah(t.Biaya)}
                           </td>
-                          <td className="p-3 hide-on-print w-10 text-center">
+                          <td className="p-3 text-center whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => setEditModalTask(t)}
-                              className="bg-amber-100 dark:bg-amber-900/30 w-7 h-7 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-200 transition cursor-pointer flex items-center justify-center"
+                              title="Edit Nominal / Catatan"
+                              className="bg-amber-100 dark:bg-amber-900/30 w-7 h-7 rounded-lg text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition cursor-pointer inline-flex items-center justify-center"
                             >
-                              <i className="bi bi-pencil"></i>
+                              <i className="bi bi-pencil text-xs"></i>
                             </button>
                           </td>
                         </tr>
                       ))
                     )}
                   </tbody>
+                  {reportFilteredTasks.length > 0 && (
+                    <tfoot className="bg-slate-50 dark:bg-slate-800/60 font-bold border-t border-slate-200 dark:border-slate-700 text-xs">
+                      <tr>
+                        <td colSpan={5} className="p-3 text-right text-slate-600 dark:text-slate-400 uppercase text-[11px]">
+                          Total Pengeluaran :
+                        </td>
+                        <td className="p-3 text-right font-mono font-black text-rose-600 dark:text-rose-400 text-sm whitespace-nowrap">
+                          {formatRupiah(reportTotalPengeluaran)}
+                        </td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
             </div>
 
-            <div className="space-y-3 hide-on-print">
+            {/* ACTION BUTTONS */}
+            <div className="space-y-2.5">
               <button
                 type="button"
                 onClick={handlePrintPDF}
-                className="w-full bg-slate-800 dark:bg-teal-600 text-white font-bold py-4 rounded-2xl shadow-md flex justify-center items-center gap-2 cursor-pointer hover:bg-slate-700 dark:hover:bg-teal-500 transition"
+                className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-teal-600 dark:hover:bg-teal-500 text-white font-bold py-3.5 px-4 rounded-2xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition active:scale-[0.99]"
               >
-                <i className="bi bi-file-earmark-pdf-fill text-lg"></i> Unduh / Cetak Laporan PDF (A5)
+                <i className="bi bi-file-earmark-pdf-fill text-lg text-teal-400 dark:text-white"></i>
+                <div className="text-left">
+                  <div className="leading-tight text-sm sm:text-base">Cetak / Unduh Laporan PDF (A4 Standar)</div>
+                  <div className="text-[10px] text-slate-400 dark:text-teal-100 font-normal">
+                    Format proporsional rapi, tidak zoom besar, siap arsip &amp; tanda tangan
+                  </div>
+                </div>
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('Muat ulang data dari server?')) {
-                    refreshData(false);
-                  }
-                }}
-                className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold py-3 rounded-2xl flex justify-center items-center gap-2 cursor-pointer hover:bg-slate-50 transition"
-              >
-                <i className="bi bi-arrow-clockwise"></i> Sinkronkan Ulang Data
-              </button>
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowPrintPreview(true)}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 px-3 rounded-xl flex justify-center items-center gap-1.5 text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/80 transition"
+                >
+                  <i className="bi bi-eye text-teal-500"></i> Pratinjau Lembar Dokumen
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Muat ulang data dari server?')) {
+                      refreshData(false);
+                    }
+                  }}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold py-2.5 px-3 rounded-xl flex justify-center items-center gap-1.5 text-xs cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/80 transition"
+                >
+                  <i className="bi bi-arrow-clockwise text-teal-500"></i> Sinkronkan Data
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -2664,11 +3144,13 @@ export function SprinterApp() {
                       className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm font-semibold text-slate-800 dark:text-slate-200 disabled:opacity-60"
                     >
                       <option value="">-- Pilih Nama Sprinter Anda --</option>
-                      {data.users.map((u) => (
-                        <option key={u.ID} value={u.Nama}>
-                          {u.Nama} ({u.Posisi})
-                        </option>
-                      ))}
+                      {data.users
+                        .filter((u) => (u.Posisi || '').trim().toLowerCase() === 'sprinter')
+                        .map((u) => (
+                          <option key={u.ID} value={u.Nama}>
+                            {u.Nama} ({u.Posisi})
+                          </option>
+                        ))}
                     </select>
                   </div>
 
@@ -2747,7 +3229,7 @@ export function SprinterApp() {
                   </h4>
                   <div className="space-y-2">
                     {data.users
-                      .filter((u) => u.Posisi.toLowerCase().includes('sprinter') || true)
+                      .filter((u) => (u.Posisi || '').trim().toLowerCase() === 'sprinter')
                       .map((sprinter) => {
                         const loc = (data.sprinterLocations || []).find(
                           (l) => (l.karyawanNama || '').toLowerCase() === sprinter.Nama.toLowerCase()
@@ -3614,6 +4096,61 @@ export function SprinterApp() {
           </div>
         </div>
       )}
+      {/* MODAL PRATINJAU CETAK / PDF (A4 PREVIEW) */}
+      {showPrintPreview && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowPrintPreview(false);
+          }}
+          className="fixed inset-0 bg-slate-900/80 z-[9500] flex flex-col items-center p-3 sm:p-6 backdrop-blur-sm overflow-y-auto animate-fade-in hide-on-print"
+        >
+          {/* Top Floating Control Bar */}
+          <div className="w-full max-w-[840px] bg-slate-800 text-white rounded-2xl p-3 sm:p-4 mb-4 flex flex-wrap justify-between items-center gap-3 shadow-2xl shrink-0 border border-slate-700">
+            <div className="flex items-center gap-2.5">
+              <span className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold text-lg">
+                <i className="bi bi-file-earmark-pdf-fill"></i>
+              </span>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white leading-tight">
+                  Pratinjau Lembar Laporan Kas (A4)
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Format proporsional standar A4 &bull; Tampilan tidak zoom / rapi siap cetak
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handlePrintPDF}
+                className="px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md active:scale-95"
+              >
+                <i className="bi bi-printer-fill text-sm"></i>
+                <span>Cetak / Unduh PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPrintPreview(false)}
+                className="w-8 h-8 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 flex items-center justify-center transition cursor-pointer"
+                title="Tutup Pratinjau"
+              >
+                <i className="bi bi-x-lg text-xs"></i>
+              </button>
+            </div>
+          </div>
+
+          {/* Paper Canvas Container */}
+          <div className="w-full max-w-[840px] overflow-x-auto pb-10 flex justify-center">
+            {renderPrintableDocument(true)}
+          </div>
+        </div>
+      )}
+
+      {/* DEDICATED PRINT DOCUMENT (ONLY VISIBLE IN BROWSER PRINT / PDF DOWNLOAD) */}
+      <div className="print-only-document">
+        {renderPrintableDocument(false)}
+      </div>
     </div>
   );
 }
